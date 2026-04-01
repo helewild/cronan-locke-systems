@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Cronan & Locke Systems</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f2eadb;
+        --panel: #fff9f1;
+        --ink: #1b1813;
+        --muted: #6d6559;
+        --accent: #1f4a40;
+        --accent-soft: #e1ece8;
+        --line: #d8cdbc;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family: Georgia, "Times New Roman", serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at top right, rgba(31, 74, 64, 0.08), transparent 28%),
+          linear-gradient(180deg, #ede2d2, var(--bg));
+      }
+      main {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 26px 18px 50px;
+      }
+      h1, h2, h3 {
+        margin: 0;
+      }
+      p {
+        color: var(--muted);
+      }
+      a {
+        color: var(--accent);
+      }
+      .hero,
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        box-shadow: 0 12px 32px rgba(31, 74, 64, 0.08);
+      }
+      .hero {
+        padding: 24px;
+        margin-bottom: 18px;
+      }
+      .badge {
+        display: inline-block;
+        margin-bottom: 12px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        background: var(--accent-soft);
+        color: var(--accent);
+        font-size: 12px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      .hero-grid {
+        display: grid;
+        gap: 16px;
+        grid-template-columns: 1.4fr 1fr;
+        align-items: start;
+      }
+      .summary {
+        display: grid;
+        gap: 14px;
+        grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+        margin-bottom: 18px;
+      }
+      .summary .panel,
+      .grid .panel {
+        padding: 18px;
+      }
+      .metric {
+        margin-top: 8px;
+        font-size: 28px;
+        color: var(--accent);
+      }
+      .grid {
+        display: grid;
+        gap: 16px;
+        grid-template-columns: 1.2fr 1fr;
+      }
+      .stack {
+        display: grid;
+        gap: 16px;
+      }
+      .section-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 12px;
+      }
+      .meta {
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+      }
+      .table th,
+      .table td {
+        padding: 10px 8px;
+        text-align: left;
+        border-bottom: 1px solid var(--line);
+        vertical-align: top;
+      }
+      .status {
+        display: inline-block;
+        padding: 3px 8px;
+        border-radius: 999px;
+        font-size: 12px;
+      }
+      .status.active {
+        background: #e1ece8;
+        color: #20453d;
+      }
+      .status.alert {
+        background: #f6e2d6;
+        color: #8b4324;
+      }
+      .status.neutral {
+        background: #ece5d8;
+        color: #6d6559;
+      }
+      ul.links {
+        margin: 12px 0 0;
+        padding-left: 18px;
+      }
+      .notice {
+        margin-top: 12px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .error {
+        margin-top: 12px;
+        color: #8b4324;
+      }
+      @media (max-width: 900px) {
+        .hero-grid,
+        .grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <div class="badge">GitHub Pages Preview</div>
+        <div class="hero-grid">
+          <div>
+            <h1>Cronan & Locke Systems</h1>
+            <p>
+              Static preview of the admin/dashboard layer for the multi-tenant Second Life RP banking platform.
+              This page runs directly from GitHub Pages using the repo’s mock data snapshot.
+            </p>
+            <div class="notice">
+              Read-only preview for now. The live admin app still runs separately from the Node backend.
+            </div>
+          </div>
+          <div class="panel" style="padding:18px;">
+            <h2 style="margin-bottom:10px;">Current Demo Tenant</h2>
+            <div id="tenant-name" style="font-size:26px; color: var(--accent);">Loading...</div>
+            <div id="tenant-bank" class="meta" style="margin-top:8px;">Loading bank name...</div>
+            <ul class="links">
+              <li><a href="./README.md">Repository Overview</a></li>
+              <li><a href="./docs/architecture.md">Architecture</a></li>
+              <li><a href="./docs/api_contract.md">API Contract</a></li>
+              <li><a href="./docs/event_schema.md">Event Schema</a></li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section class="summary">
+        <article class="panel">
+          <div class="meta">Tenants</div>
+          <div id="metric-tenants" class="metric">-</div>
+        </article>
+        <article class="panel">
+          <div class="meta">Accounts</div>
+          <div id="metric-accounts" class="metric">-</div>
+        </article>
+        <article class="panel">
+          <div class="meta">Cards</div>
+          <div id="metric-cards" class="metric">-</div>
+        </article>
+        <article class="panel">
+          <div class="meta">Active Incidents</div>
+          <div id="metric-incidents" class="metric">-</div>
+        </article>
+        <article class="panel">
+          <div class="meta">Due Fines</div>
+          <div id="metric-fines" class="metric">-</div>
+        </article>
+        <article class="panel">
+          <div class="meta">Active Loans</div>
+          <div id="metric-loans" class="metric">-</div>
+        </article>
+      </section>
+
+      <section class="grid">
+        <div class="stack">
+          <article class="panel">
+            <div class="section-head">
+              <h2>Tenants</h2>
+              <span class="meta">Platform and tenant scope</span>
+            </div>
+            <table class="table" id="tenants-table"></table>
+          </article>
+
+          <article class="panel">
+            <div class="section-head">
+              <h2>Accounts</h2>
+              <span class="meta">Customer and balance snapshot</span>
+            </div>
+            <table class="table" id="accounts-table"></table>
+          </article>
+        </div>
+
+        <div class="stack">
+          <article class="panel">
+            <div class="section-head">
+              <h2>Vault Incidents</h2>
+              <span class="meta">Security and dispatch snapshot</span>
+            </div>
+            <table class="table" id="incidents-table"></table>
+          </article>
+
+          <article class="panel">
+            <div class="section-head">
+              <h2>Cards and Audit</h2>
+              <span class="meta">Operational view</span>
+            </div>
+            <table class="table" id="cards-table"></table>
+            <table class="table" id="audit-table" style="margin-top:16px;"></table>
+          </article>
+        </div>
+      </section>
+
+      <div id="load-error" class="error"></div>
+    </main>
+
+    <script>
+      function setText(id, value) {
+        document.getElementById(id).textContent = value;
+      }
+
+      function renderTable(id, columns, rows) {
+        const table = document.getElementById(id);
+        const head = "<tr>" + columns.map((column) => "<th>" + column.label + "</th>").join("") + "</tr>";
+        const body = rows.map((row) => {
+          return "<tr>" + columns.map((column) => "<td>" + (column.render ? column.render(row) : (row[column.key] ?? "")) + "</td>").join("") + "</tr>";
+        }).join("");
+        table.innerHTML = head + body;
+      }
+
+      function statusChip(text, tone) {
+        return "<span class='status " + tone + "'>" + text + "</span>";
+      }
+
+      async function boot() {
+        try {
+          const response = await fetch("./services/api/data/store.json");
+          const store = await response.json();
+
+          const tenants = store.tenants || [];
+          const accounts = store.accounts || [];
+          const cards = store.cards || [];
+          const incidents = store.vault_incidents || [];
+          const fines = store.fines || [];
+          const loans = store.loans || [];
+          const audits = store.audit_logs || [];
+
+          const tenant = tenants[0] || null;
+          if (tenant) {
+            setText("tenant-name", tenant.name);
+            setText("tenant-bank", tenant.bank_name);
+          } else {
+            setText("tenant-name", "No tenant loaded");
+            setText("tenant-bank", "No bank data available");
+          }
+
+          setText("metric-tenants", tenants.length);
+          setText("metric-accounts", accounts.length);
+          setText("metric-cards", cards.length);
+          setText("metric-incidents", incidents.filter((incident) => incident.state === "ACTIVE").length);
+          setText("metric-fines", fines.filter((fine) => fine.status === "DUE").length);
+          setText("metric-loans", loans.filter((loan) => loan.status === "ACTIVE").length);
+
+          renderTable("tenants-table", [
+            { key: "name", label: "Tenant" },
+            { key: "bank_name", label: "Bank" },
+            { key: "status", label: "Status", render: (row) => statusChip(row.status, "active") }
+          ], tenants);
+
+          renderTable("accounts-table", [
+            { key: "customer_name", label: "Customer" },
+            { key: "account_id", label: "Account" },
+            { key: "balance", label: "Balance", render: (row) => "L$" + row.balance },
+            { key: "status", label: "Status", render: (row) => statusChip(row.status, "neutral") }
+          ], accounts);
+
+          renderTable("incidents-table", [
+            { key: "incident_id", label: "Incident" },
+            { key: "stage", label: "Stage", render: (row) => statusChip(row.stage, "alert") },
+            { key: "responding_unit", label: "Unit" },
+            { key: "last_update", label: "Last Update" }
+          ], incidents);
+
+          renderTable("cards-table", [
+            { key: "card_id", label: "Card" },
+            { key: "account_id", label: "Account" },
+            { key: "state", label: "State", render: (row) => statusChip(row.state, row.state === "ACTIVE" ? "active" : "alert") }
+          ], cards);
+
+          renderTable("audit-table", [
+            { key: "audit_id", label: "Audit" },
+            { key: "action", label: "Action" },
+            { key: "actor_name", label: "Actor" },
+            { key: "status", label: "Status", render: (row) => statusChip(row.status, "neutral") }
+          ], audits.slice(0, 5));
+        } catch (error) {
+          document.getElementById("load-error").textContent =
+            "Unable to load preview data from the repository snapshot.";
+        }
+      }
+
+      boot();
+    </script>
+  </body>
+</html>
