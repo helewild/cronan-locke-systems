@@ -141,12 +141,17 @@
         display: flex;
         align-items: center;
         gap: 10px;
+        width: 100%;
         padding: 9px 12px;
         margin: 4px 0;
         font-size: 14px;
         color: var(--text-dim);
         text-transform: uppercase;
         border: 1px solid transparent;
+        background: transparent;
+        font: inherit;
+        text-align: left;
+        cursor: pointer;
       }
 
       .nav-link.active {
@@ -200,6 +205,12 @@
         font: inherit;
         text-transform: uppercase;
         cursor: pointer;
+      }
+
+      .control-button:hover,
+      .action:hover,
+      .nav-link:hover {
+        filter: brightness(1.08);
       }
 
       .main {
@@ -344,6 +355,16 @@
         text-transform: uppercase;
       }
 
+      .subfoot button {
+        padding: 0;
+        border: 0;
+        background: transparent;
+        color: var(--text-dim);
+        font: inherit;
+        text-transform: uppercase;
+        cursor: pointer;
+      }
+
       .logs {
         margin-top: 16px;
       }
@@ -443,6 +464,16 @@
         margin: 5px 0;
       }
 
+      .system-note {
+        margin-top: 8px;
+        padding-top: 10px;
+        border-top: 1px solid rgba(64, 73, 58, 0.35);
+        color: var(--text-dim);
+        font-size: 12px;
+        text-transform: uppercase;
+        line-height: 1.7;
+      }
+
       @media (max-width: 1240px) {
         .metrics {
           grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -483,14 +514,14 @@
             </section>
 
             <nav class="side-nav panel">
-              <div class="nav-link"><span class="nav-icon"></span>Bank Core</div>
-              <div class="nav-link active"><span class="nav-icon"></span>Accounts</div>
-              <div class="nav-link"><span class="nav-icon"></span>Transactions</div>
-              <div class="nav-link"><span class="nav-icon"></span>Vault Control</div>
-              <div class="nav-link"><span class="nav-icon"></span>Incidents</div>
-              <div class="nav-link"><span class="nav-icon"></span>Payroll</div>
-              <div class="nav-link"><span class="nav-icon"></span>ATM Network</div>
-              <div class="nav-link"><span class="nav-icon"></span>Audit Logs</div>
+              <button class="nav-link" data-view="bank-core" type="button"><span class="nav-icon"></span>Bank Core</button>
+              <button class="nav-link active" data-view="accounts" type="button"><span class="nav-icon"></span>Accounts</button>
+              <button class="nav-link" data-view="transactions" type="button"><span class="nav-icon"></span>Transactions</button>
+              <button class="nav-link" data-view="vault-control" type="button"><span class="nav-icon"></span>Vault Control</button>
+              <button class="nav-link" data-view="incidents" type="button"><span class="nav-icon"></span>Incidents</button>
+              <button class="nav-link" data-view="payroll" type="button"><span class="nav-icon"></span>Payroll</button>
+              <button class="nav-link" data-view="atm-network" type="button"><span class="nav-icon"></span>ATM Network</button>
+              <button class="nav-link" data-view="audit-logs" type="button"><span class="nav-icon"></span>Audit Logs</button>
             </nav>
 
             <section class="tenant-card panel">
@@ -503,7 +534,12 @@
             <section class="status-card panel">
               <div class="side-label">Admin</div>
               <div style="margin-top:8px; font-size:16px; color:#d4dbc8;">ROLEPLAY BANKING</div>
-              <div style="margin-top:12px; color:var(--text-dim); font-size:12px;">ALL SYSTEMS NOMINAL</div>
+              <div id="status-banner" style="margin-top:12px; color:var(--text-dim); font-size:12px;">ALL SYSTEMS NOMINAL</div>
+              <div class="system-note">
+                <div id="status-line-1">ATM NETWORK: ONLINE</div>
+                <div id="status-line-2">DISPATCH: MONITORING</div>
+                <div id="status-line-3">MODE: STATIC PREVIEW</div>
+              </div>
             </section>
           </aside>
 
@@ -548,21 +584,16 @@
 
             <section class="work">
               <section class="accounts-panel panel">
-                <div class="terminal-title">Accounts</div>
+                <div id="view-title" class="terminal-title">Accounts</div>
                 <table>
-                  <thead>
-                    <tr>
-                      <th>Account ID</th>
-                      <th>Customer</th>
-                      <th>Balance</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody id="accounts-body"></tbody>
+                  <thead id="table-head"></thead>
+                  <tbody id="table-body"></tbody>
                 </table>
                 <div class="subfoot">
-                  <div id="accounts-foot">Showing 0 accounts</div>
-                  <div>Prev 1 Next</div>
+                  <div id="accounts-foot">Showing 0 records</div>
+                  <div>
+                    <button id="refresh-btn" type="button">Refresh View</button>
+                  </div>
                 </div>
 
                 <div class="logs">
@@ -613,8 +644,34 @@
       const previewState = {
         store: null,
         incident: null,
-        logs: []
+        logs: [],
+        view: "accounts",
+        atmNetwork: []
       };
+
+      const STORAGE_KEY = "cronan-locke-preview-state";
+
+      function saveState() {
+        const payload = {
+          incident: previewState.incident,
+          logs: previewState.logs,
+          view: previewState.view,
+          atmNetwork: previewState.atmNetwork
+        };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+      }
+
+      function loadSavedState() {
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          if (!raw) {
+            return null;
+          }
+          return JSON.parse(raw);
+        } catch (error) {
+          return null;
+        }
+      }
 
       function setClock() {
         const now = new Date();
@@ -630,6 +687,7 @@
       function addLog(line) {
         previewState.logs.unshift(stamp() + " " + line);
         previewState.logs = previewState.logs.slice(0, 8);
+        saveState();
         renderLogPanels();
       }
 
@@ -645,6 +703,16 @@
         const tenant = (store.tenants || [])[0];
         document.getElementById("tenant-name").textContent = tenant ? tenant.name.toUpperCase() : "NO TENANT";
         document.getElementById("tenant-bank").textContent = tenant ? tenant.bank_name.toUpperCase() : "NO BANK";
+      }
+
+      function updateSystemStatus() {
+        const atmOffline = previewState.atmNetwork.filter((atm) => atm.status !== "ONLINE").length;
+        const incidentActive = previewState.incident && previewState.incident.state === "ACTIVE";
+
+        document.getElementById("status-banner").textContent = incidentActive ? "SECURITY EVENT ACTIVE" : "ALL SYSTEMS NOMINAL";
+        document.getElementById("status-line-1").textContent = "ATM NETWORK: " + (atmOffline ? "DEGRADED" : "ONLINE");
+        document.getElementById("status-line-2").textContent = "DISPATCH: " + (incidentActive ? "ENGAGED" : "MONITORING");
+        document.getElementById("status-line-3").textContent = "MODE: STATIC PREVIEW";
       }
 
       function renderMetrics(store) {
@@ -663,17 +731,106 @@
         document.getElementById("metric-loans").textContent = loans;
       }
 
-      function renderAccounts(store) {
-        const accounts = store.accounts || [];
-        document.getElementById("accounts-body").innerHTML = accounts.map((account) => `
-          <tr>
-            <td>${account.account_id}</td>
-            <td>${account.customer_name}</td>
-            <td class="money">L$${account.balance}</td>
-            <td><span class="chip">${account.status}</span></td>
-          </tr>
-        `).join("");
-        document.getElementById("accounts-foot").textContent = "Showing " + accounts.length + " out of " + accounts.length + " accounts";
+      function renderTable(view) {
+        const store = previewState.store;
+        const head = document.getElementById("table-head");
+        const body = document.getElementById("table-body");
+        const foot = document.getElementById("accounts-foot");
+        const title = document.getElementById("view-title");
+        let columns = [];
+        let rows = [];
+
+        if (view === "bank-core") {
+          title.textContent = "Bank Core";
+          columns = ["Module", "Scope", "Health", "Note"];
+          rows = [
+            ["Accounts", "Customer banking", "ONLINE", "Balances and transfers available"],
+            ["Justice", "Fines and enforcement", "ONLINE", "Due fine review active"],
+            ["Credit", "Loans and terms", "ONLINE", "Active loan servicing"],
+            ["Security", "Vault and dispatch", "ALERT", previewState.incident ? previewState.incident.stage : "No incident"]
+          ];
+        } else if (view === "accounts") {
+          title.textContent = "Accounts";
+          columns = ["Account ID", "Customer", "Balance", "Status"];
+          rows = (store.accounts || []).map((account) => [
+            account.account_id,
+            account.customer_name,
+            { money: account.balance },
+            { chip: account.status, tone: account.status === "ACTIVE" ? "" : "dim" }
+          ]);
+        } else if (view === "transactions") {
+          title.textContent = "Transactions";
+          columns = ["Transaction", "Account", "Amount", "Direction"];
+          rows = (store.transactions || []).map((txn) => [
+            txn.type,
+            txn.account_id,
+            { money: txn.amount },
+            { chip: txn.direction, tone: txn.direction === "OUT" ? "alert" : "" }
+          ]);
+        } else if (view === "vault-control") {
+          title.textContent = "Vault Control";
+          rows = previewState.incident ? [[
+            previewState.incident.vault_id,
+            previewState.incident.stage,
+            previewState.incident.responding_unit,
+            previewState.incident.marked_cash_flag ? "YES" : "NO"
+          ]] : [];
+          columns = ["Vault", "Stage", "Unit", "Marked Cash"];
+        } else if (view === "incidents") {
+          title.textContent = "Incidents";
+          columns = ["Incident ID", "Actor", "Stage", "State"];
+          rows = (store.vault_incidents || []).map((incident) => [
+            incident.incident_id,
+            incident.actor_name,
+            incident.stage,
+            { chip: incident.state, tone: incident.state === "ACTIVE" ? "alert" : "dim" }
+          ]);
+        } else if (view === "payroll") {
+          title.textContent = "Payroll";
+          columns = ["Type", "Account", "Amount", "Memo"];
+          rows = (store.transactions || [])
+            .filter((txn) => txn.type === "PAYROLL")
+            .map((txn) => [txn.type, txn.account_id, { money: txn.amount }, txn.memo]);
+        } else if (view === "atm-network") {
+          title.textContent = "ATM Network";
+          columns = ["ATM ID", "Branch", "Status", "Scope"];
+          rows = previewState.atmNetwork.map((atm) => [
+            atm.id,
+            atm.branch,
+            { chip: atm.status, tone: atm.status === "ONLINE" ? "" : "alert" },
+            atm.scope
+          ]);
+        } else if (view === "audit-logs") {
+          title.textContent = "Audit Logs";
+          columns = ["Action", "Actor", "Target", "Status"];
+          rows = (store.audit_logs || []).map((audit) => [
+            audit.action,
+            audit.actor_name,
+            audit.target_account_id || audit.object_id,
+            { chip: audit.status.toUpperCase(), tone: audit.status === "approved" ? "" : "dim" }
+          ]);
+        }
+
+        head.innerHTML = "<tr>" + columns.map((column) => `<th>${column}</th>`).join("") + "</tr>";
+        body.innerHTML = rows.map((row) => "<tr>" + row.map((cell) => {
+          if (cell && typeof cell === "object" && "money" in cell) {
+            return `<td class="money">L$${cell.money}</td>`;
+          }
+          if (cell && typeof cell === "object" && "chip" in cell) {
+            return `<td><span class="chip ${cell.tone || ""}">${cell.chip}</span></td>`;
+          }
+          return `<td>${cell}</td>`;
+        }).join("") + "</tr>").join("");
+        foot.textContent = "Showing " + rows.length + " records for " + title.textContent.toUpperCase();
+      }
+
+      function setActiveView(view) {
+        previewState.view = view;
+        document.querySelectorAll(".nav-link").forEach((link) => {
+          link.classList.toggle("active", link.dataset.view === view);
+        });
+        renderTable(view);
+        saveState();
       }
 
       function renderIncident() {
@@ -686,6 +843,7 @@
         document.getElementById("incident-stage").textContent = incident.stage;
         document.getElementById("incident-unit").textContent = incident.responding_unit;
         document.getElementById("incident-update").textContent = incident.last_update.toUpperCase();
+        updateSystemStatus();
       }
 
       function seedLogs(store) {
@@ -702,6 +860,33 @@
         }
         previewState.logs = lines;
         renderLogPanels();
+      }
+
+      function buildAtmNetwork(store) {
+        const branch = (store.branches || [])[0];
+        const tenant = (store.tenants || [])[0];
+        return [
+          {
+            id: "atm-001",
+            branch: branch ? branch.name : "Main Branch",
+            status: "ONLINE",
+            scope: tenant ? tenant.name : "Demo Tenant"
+          },
+          {
+            id: "atm-002",
+            branch: branch ? branch.name + " Annex" : "Annex",
+            status: "ONLINE",
+            scope: tenant ? tenant.name : "Demo Tenant"
+          }
+        ];
+      }
+
+      function wireNavigation() {
+        document.querySelectorAll(".nav-link").forEach((link) => {
+          link.addEventListener("click", () => {
+            setActiveView(link.dataset.view);
+          });
+        });
       }
 
       function wireActions() {
@@ -723,26 +908,54 @@
           previewState.incident.stage = "LOCKDOWN TRIGGERED";
           previewState.incident.last_update = "Remote vault lockdown authorized from admin terminal.";
           renderIncident();
+          renderTable(previewState.view);
           addLog("Vault lockdown triggered for " + previewState.incident.vault_id);
         });
 
         document.getElementById("shutdown-btn").addEventListener("click", () => {
+          previewState.atmNetwork = previewState.atmNetwork.map((atm) => ({
+            ...atm,
+            status: "OFFLINE"
+          }));
+          renderTable(previewState.view);
+          updateSystemStatus();
+          saveState();
           addLog("ATM network shutdown queued for demo tenant");
+        });
+
+        document.getElementById("refresh-btn").addEventListener("click", () => {
+          renderTable(previewState.view);
+          addLog("Manual refresh executed for " + previewState.view.toUpperCase());
+        });
+
+        document.querySelector(".control-button").addEventListener("click", () => {
+          addLog("Tenant management requested for demo tenant");
         });
       }
 
       async function boot() {
         const response = await fetch("./services/api/data/store.json");
         const store = await response.json();
+        const saved = loadSavedState();
 
         previewState.store = store;
-        previewState.incident = (store.vault_incidents || [])[0] || null;
+        previewState.incident = saved && saved.incident ? saved.incident : ((store.vault_incidents || [])[0] || null);
+        previewState.logs = saved && Array.isArray(saved.logs) ? saved.logs : [];
+        previewState.view = saved && saved.view ? saved.view : "accounts";
+        previewState.atmNetwork = saved && Array.isArray(saved.atmNetwork) && saved.atmNetwork.length
+          ? saved.atmNetwork
+          : buildAtmNetwork(store);
 
         renderTenant(store);
         renderMetrics(store);
-        renderAccounts(store);
         renderIncident();
-        seedLogs(store);
+        if (!previewState.logs.length) {
+          seedLogs(store);
+        } else {
+          renderLogPanels();
+        }
+        renderTable(previewState.view);
+        wireNavigation();
         wireActions();
         setClock();
         setInterval(setClock, 1000);
