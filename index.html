@@ -7,261 +7,284 @@
     <style>
       :root {
         color-scheme: dark;
-        --bg: #0d0f0b;
-        --shell: #131611;
-        --panel: #171b15;
-        --panel-soft: #1b2019;
-        --line: #32382d;
-        --line-bright: #59624f;
-        --text: #bfc7ad;
-        --muted: #7c846f;
-        --accent: #9bb07b;
-        --accent-bright: #c6df9d;
-        --danger: #da5e46;
-        --danger-glow: rgba(218, 94, 70, 0.38);
-        --good: #85b86d;
-        --shadow: rgba(0, 0, 0, 0.55);
+        --bg: #080907;
+        --frame-1: #0d0f0b;
+        --frame-2: #11140f;
+        --panel: #161a14;
+        --panel-2: #1a1f18;
+        --panel-3: #0f120e;
+        --line: #2f352b;
+        --line-2: #40493a;
+        --text: #b9c1ae;
+        --text-dim: #7b836f;
+        --accent: #a7bc86;
+        --accent-soft: rgba(167, 188, 134, 0.18);
+        --danger: #e06249;
+        --danger-soft: rgba(224, 98, 73, 0.16);
+        --danger-glow: rgba(224, 98, 73, 0.35);
+        --shadow: rgba(0, 0, 0, 0.65);
       }
 
       * {
         box-sizing: border-box;
       }
 
+      html,
       body {
         margin: 0;
-        min-height: 100vh;
+        min-height: 100%;
         background:
-          radial-gradient(circle at top center, rgba(155, 176, 123, 0.08), transparent 24%),
-          linear-gradient(180deg, #0a0c09, var(--bg));
+          radial-gradient(circle at top center, rgba(167, 188, 134, 0.05), transparent 18%),
+          linear-gradient(180deg, #070805, var(--bg));
         color: var(--text);
         font-family: "Courier New", Courier, monospace;
-        letter-spacing: 0.03em;
+        letter-spacing: 0.04em;
       }
 
-      .frame {
-        max-width: 1360px;
-        margin: 18px auto;
-        padding: 14px;
-        border: 1px solid #252a22;
+      body {
+        padding: 10px;
+      }
+
+      .machine {
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 10px;
+        border: 1px solid #1d211b;
         background:
-          linear-gradient(180deg, rgba(255,255,255,0.02), transparent 8%),
-          linear-gradient(180deg, #11140f, #0f120e);
+          linear-gradient(180deg, rgba(255,255,255,0.03), transparent 12%),
+          linear-gradient(180deg, var(--frame-2), var(--frame-1));
         box-shadow:
-          inset 0 0 0 1px rgba(255,255,255,0.03),
-          0 25px 60px var(--shadow);
+          inset 0 0 0 1px rgba(255,255,255,0.025),
+          0 24px 80px var(--shadow);
       }
 
-      .screen {
-        display: grid;
-        grid-template-columns: 276px 1fr;
-        gap: 14px;
-        min-height: calc(100vh - 70px);
-      }
-
-      .bevel {
+      .machine-inner {
+        border: 1px solid #20251e;
+        padding: 10px;
         background:
-          linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01)),
+          linear-gradient(180deg, rgba(255,255,255,0.015), rgba(255,255,255,0)),
+          linear-gradient(180deg, #10130f, #0c0f0b);
+      }
+
+      .layout {
+        display: grid;
+        grid-template-columns: 252px 1fr;
+        gap: 10px;
+      }
+
+      .panel {
+        position: relative;
+        background:
+          linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.005)),
           var(--panel);
         border: 1px solid var(--line);
         box-shadow:
           inset 0 0 0 1px rgba(255,255,255,0.03),
-          inset 0 8px 20px rgba(255,255,255,0.015);
+          inset 0 8px 16px rgba(255,255,255,0.015);
+      }
+
+      .panel::before {
+        content: "";
+        position: absolute;
+        inset: 4px;
+        border: 1px solid rgba(255,255,255,0.025);
+        pointer-events: none;
       }
 
       .sidebar {
         display: grid;
         grid-template-rows: auto auto 1fr auto;
-        gap: 12px;
-        padding: 12px;
+        gap: 10px;
       }
 
-      .crest {
-        padding: 16px;
-        min-height: 200px;
-        position: relative;
+      .bank-crest {
+        padding: 16px 16px 18px;
+        min-height: 206px;
+        display: grid;
+        align-content: center;
       }
 
-      .crest::before {
-        content: "";
-        position: absolute;
-        inset: 12px;
-        border: 1px solid rgba(198, 223, 157, 0.22);
-        pointer-events: none;
-      }
-
-      .crest-mark {
-        width: 76px;
-        height: 92px;
-        margin: 8px auto 18px;
-        border: 1px solid rgba(198, 223, 157, 0.35);
+      .bank-crest .shield {
+        width: 86px;
+        height: 106px;
+        margin: 0 auto 16px;
+        border: 1px solid rgba(167, 188, 134, 0.4);
         display: grid;
         place-items: center;
-        color: var(--accent-bright);
-        font-size: 28px;
-        text-shadow: 0 0 14px rgba(198, 223, 157, 0.14);
+        color: var(--accent);
+        background:
+          linear-gradient(180deg, rgba(167,188,134,0.08), rgba(167,188,134,0.02));
+        font-size: 30px;
+        text-shadow: 0 0 12px rgba(167,188,134,0.15);
       }
 
-      .crest h1 {
-        margin: 0;
+      .bank-crest .bank-subtitle {
         text-align: center;
+        color: #d1d7c5;
         font-size: 18px;
-        color: #d3d8c6;
+        line-height: 1.1;
       }
 
-      .crest h2 {
-        margin: 10px 0 0;
+      .bank-crest .bank-title {
+        margin-top: 10px;
         text-align: center;
-        font-size: 26px;
-        line-height: 1.05;
-        color: var(--accent-bright);
+        color: var(--accent);
+        font-size: 15px;
+        letter-spacing: 0.12em;
       }
 
-      .nav {
+      .side-nav {
         padding: 8px;
       }
 
-      .nav-item {
+      .nav-link {
         display: flex;
         align-items: center;
         gap: 10px;
-        padding: 10px 12px;
-        margin: 6px 0;
-        border: 1px solid transparent;
-        color: var(--muted);
-        text-transform: uppercase;
+        padding: 9px 12px;
+        margin: 4px 0;
         font-size: 14px;
+        color: var(--text-dim);
+        text-transform: uppercase;
+        border: 1px solid transparent;
       }
 
-      .nav-item.active {
-        color: var(--accent-bright);
-        background: linear-gradient(90deg, rgba(155,176,123,0.18), rgba(155,176,123,0.04));
-        border-color: rgba(155,176,123,0.28);
-        box-shadow: inset 0 0 18px rgba(155,176,123,0.08);
+      .nav-link.active {
+        color: #d8dece;
+        background: linear-gradient(90deg, rgba(167,188,134,0.16), rgba(167,188,134,0.03));
+        border-color: rgba(167, 188, 134, 0.22);
+        box-shadow: inset 0 0 18px rgba(167,188,134,0.06);
       }
 
-      .nav-dot {
-        width: 12px;
-        height: 12px;
+      .nav-icon {
+        width: 14px;
+        height: 14px;
         border: 1px solid currentColor;
-        opacity: 0.9;
+        opacity: 0.85;
       }
 
-      .tenant-box,
-      .ops-box {
+      .tenant-card,
+      .status-card {
         padding: 14px;
       }
 
-      .label {
-        color: var(--muted);
+      .side-label {
+        color: var(--text-dim);
         font-size: 12px;
         text-transform: uppercase;
       }
 
       .tenant-name {
         margin-top: 10px;
-        font-size: 22px;
-        color: #d4d9c8;
+        color: #d8decf;
+        font-size: 15px;
+        text-transform: uppercase;
       }
 
       .tenant-bank {
         margin-top: 8px;
-        color: var(--accent-bright);
-        font-size: 17px;
+        color: var(--accent);
+        font-size: 19px;
+        line-height: 1.15;
+        text-transform: uppercase;
       }
 
-      .button-mini {
+      .control-button {
+        width: 100%;
         margin-top: 12px;
         padding: 10px 12px;
-        border: 1px solid rgba(155,176,123,0.28);
-        background: linear-gradient(180deg, rgba(155,176,123,0.12), rgba(155,176,123,0.04));
-        color: var(--accent-bright);
-        text-transform: uppercase;
+        background:
+          linear-gradient(180deg, rgba(167,188,134,0.12), rgba(167,188,134,0.03));
+        border: 1px solid rgba(167, 188, 134, 0.25);
+        color: #d1d8c6;
         font: inherit;
-        width: 100%;
+        text-transform: uppercase;
         cursor: pointer;
       }
 
       .main {
         display: grid;
         grid-template-rows: auto auto auto 1fr auto;
-        gap: 12px;
-        padding: 12px;
-      }
-
-      .topbar {
-        display: flex;
-        justify-content: space-between;
-        gap: 16px;
-        align-items: start;
-        padding: 16px 18px;
-      }
-
-      .brand {
-        font-size: 22px;
-        color: #d0d7c3;
-        font-weight: bold;
-      }
-
-      .terminal-status {
-        text-align: right;
-        color: var(--muted);
-        font-size: 13px;
-        text-transform: uppercase;
-        line-height: 1.6;
-      }
-
-      .terminal-status strong {
-        color: var(--accent-bright);
-      }
-
-      .section-title {
-        padding: 0 4px;
-        color: var(--muted);
-        text-transform: uppercase;
-        font-size: 13px;
-      }
-
-      .metric-row {
-        display: grid;
-        grid-template-columns: repeat(6, minmax(0, 1fr));
         gap: 10px;
       }
 
-      .metric-card {
-        padding: 14px 14px 12px;
-        min-height: 82px;
-      }
-
-      .metric-card .metric-name {
-        color: var(--muted);
-        text-transform: uppercase;
-        font-size: 13px;
-      }
-
-      .metric-card .metric-value {
-        margin-top: 12px;
-        font-size: 42px;
-        line-height: 1;
-        color: var(--accent-bright);
-        text-align: right;
-      }
-
-      .content {
+      .header {
         display: grid;
-        grid-template-columns: 1.45fr 0.9fr;
-        gap: 12px;
+        grid-template-columns: 1fr auto;
+        gap: 16px;
+        align-items: center;
+        padding: 16px 18px;
       }
 
-      .panel-wrap {
-        padding: 14px;
+      .header-title {
+        color: #d6ddca;
+        font-size: 22px;
+        font-weight: bold;
+        text-transform: uppercase;
       }
 
-      .terminal-head {
-        margin-bottom: 12px;
-        padding-bottom: 8px;
-        border-bottom: 1px solid var(--line);
-        font-size: 16px;
-        color: #d4d9ca;
+      .header-status {
+        text-align: right;
+        color: var(--text-dim);
+        font-size: 13px;
+        text-transform: uppercase;
+        line-height: 1.7;
+      }
+
+      .header-status strong {
+        color: var(--accent);
+      }
+
+      .section-bar {
+        padding: 0 8px;
+        color: var(--text-dim);
+        font-size: 13px;
+        text-transform: uppercase;
+      }
+
+      .metrics {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .metric-box {
+        padding: 10px 12px;
+        min-height: 78px;
+      }
+
+      .metric-name {
+        color: var(--text-dim);
+        font-size: 12px;
+        text-transform: uppercase;
+      }
+
+      .metric-value {
+        margin-top: 10px;
+        color: var(--accent);
+        text-align: right;
+        font-size: 38px;
+        line-height: 1;
+      }
+
+      .work {
+        display: grid;
+        grid-template-columns: 1.52fr 0.9fr;
+        gap: 10px;
+      }
+
+      .accounts-panel,
+      .incident-panel,
+      .ticker-panel {
+        padding: 12px;
+      }
+
+      .terminal-title {
+        padding-bottom: 10px;
+        margin-bottom: 10px;
+        border-bottom: 1px solid rgba(64, 73, 58, 0.55);
+        color: #cfd6c4;
+        font-size: 17px;
         text-transform: uppercase;
       }
 
@@ -273,153 +296,162 @@
 
       th,
       td {
-        padding: 10px 8px;
-        border-bottom: 1px solid rgba(89, 98, 79, 0.28);
         text-align: left;
+        padding: 9px 8px;
+        border-bottom: 1px solid rgba(64, 73, 58, 0.35);
       }
 
       th {
-        color: var(--muted);
-        text-transform: uppercase;
+        color: var(--text-dim);
         font-size: 12px;
+        text-transform: uppercase;
         font-weight: normal;
       }
 
-      .balance {
-        color: #d8decf;
+      .money {
+        color: #d6dccb;
       }
 
-      .status-chip {
+      .chip {
         display: inline-block;
         padding: 3px 8px;
-        border: 1px solid rgba(155,176,123,0.24);
-        color: var(--accent-bright);
-        background: rgba(155,176,123,0.08);
+        border: 1px solid rgba(167, 188, 134, 0.22);
+        color: var(--accent);
+        background: rgba(167, 188, 134, 0.06);
         font-size: 12px;
         text-transform: uppercase;
       }
 
-      .status-chip.alert {
-        color: #ff8d74;
-        border-color: rgba(218,94,70,0.32);
-        background: rgba(218,94,70,0.08);
+      .chip.alert {
+        border-color: rgba(224, 98, 73, 0.35);
+        color: #ff9a84;
+        background: rgba(224, 98, 73, 0.08);
+      }
+
+      .chip.dim {
+        border-color: rgba(123,131,111,0.25);
+        color: #a5ad9f;
+        background: rgba(123,131,111,0.06);
+      }
+
+      .subfoot {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        padding-top: 10px;
+        color: var(--text-dim);
+        font-size: 12px;
+        text-transform: uppercase;
       }
 
       .logs {
         margin-top: 16px;
       }
 
-      .log-stream {
+      .log-list {
         display: grid;
         gap: 8px;
-        max-height: 240px;
+        max-height: 210px;
         overflow: auto;
-        padding-right: 4px;
       }
 
-      .log-line {
+      .log-item {
         padding: 8px 10px;
-        border: 1px solid rgba(89, 98, 79, 0.24);
+        border: 1px solid rgba(64, 73, 58, 0.35);
         background: rgba(255,255,255,0.01);
-        color: #c8cfbc;
+        color: #c4cbb9;
         font-size: 13px;
       }
 
-      .incident-shell {
-        padding: 16px;
+      .incident-panel {
+        display: grid;
+        align-content: start;
+        gap: 12px;
       }
 
-      .incident-alert {
-        margin-bottom: 14px;
+      .alert-box {
         padding: 16px 14px;
-        border: 1px solid rgba(218,94,70,0.45);
-        color: #ff8d74;
+        border: 1px solid rgba(224, 98, 73, 0.48);
+        color: #ff8b73;
         background:
-          linear-gradient(180deg, rgba(218,94,70,0.10), rgba(218,94,70,0.04));
+          linear-gradient(180deg, rgba(224,98,73,0.12), rgba(224,98,73,0.04));
         box-shadow:
-          inset 0 0 22px rgba(218,94,70,0.08),
-          0 0 18px var(--danger-glow);
+          inset 0 0 20px rgba(224,98,73,0.08),
+          0 0 16px var(--danger-glow);
+        font-size: 16px;
         text-transform: uppercase;
-        font-size: 15px;
       }
 
       .incident-grid {
         display: grid;
         gap: 10px;
-        margin-bottom: 14px;
       }
 
-      .incident-row {
+      .incident-line {
         display: grid;
-        grid-template-columns: 96px 1fr;
+        grid-template-columns: 80px 1fr;
         gap: 10px;
-        color: #cdd4c1;
+        align-items: start;
       }
 
-      .incident-row .key {
-        color: var(--muted);
+      .incident-line .k {
+        color: var(--text-dim);
         text-transform: uppercase;
         font-size: 12px;
       }
 
-      .incident-row .value {
+      .incident-line .v {
+        color: #d4dbc8;
         font-size: 18px;
       }
 
-      .incident-row .value.danger {
-        color: #ff8d74;
+      .incident-line .v.hot {
+        color: #ff8b73;
       }
 
-      .action-btn {
+      .incident-line .v.small {
+        font-size: 14px;
+        line-height: 1.5;
+      }
+
+      .action {
         width: 100%;
-        margin-top: 10px;
         padding: 13px 14px;
-        border: 1px solid rgba(155,176,123,0.24);
+        border: 1px solid rgba(167, 188, 134, 0.22);
         background:
-          linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.005)),
-          #1a1f18;
-        color: #d2d8c8;
-        text-transform: uppercase;
+          linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0)),
+          var(--panel-2);
+        color: #d4dbc8;
         font: inherit;
+        text-transform: uppercase;
         cursor: pointer;
       }
 
-      .action-btn.danger {
-        border-color: rgba(218,94,70,0.42);
-        color: #ff9c87;
-        box-shadow: inset 0 0 14px rgba(218,94,70,0.08);
+      .action.danger {
+        border-color: rgba(224, 98, 73, 0.4);
+        color: #ff9a84;
+        box-shadow: inset 0 0 14px rgba(224,98,73,0.07);
       }
 
-      .ticker {
-        padding: 14px 16px;
-        color: #c2cab6;
-        font-size: 14px;
-        min-height: 66px;
+      .ticker-panel {
+        min-height: 70px;
+        color: #c3cab8;
+        font-size: 13px;
       }
 
       .ticker-line {
-        margin: 6px 0;
+        margin: 5px 0;
       }
 
-      .divider {
-        color: var(--muted);
-      }
-
-      .preview-note {
-        margin-top: 10px;
-        color: var(--muted);
-        font-size: 12px;
-      }
-
-      @media (max-width: 1200px) {
-        .metric-row {
+      @media (max-width: 1240px) {
+        .metrics {
           grid-template-columns: repeat(3, minmax(0, 1fr));
         }
       }
 
       @media (max-width: 980px) {
-        .screen,
-        .content {
+        .layout,
+        .work {
           grid-template-columns: 1fr;
         }
 
@@ -428,230 +460,224 @@
         }
       }
 
-      @media (max-width: 720px) {
-        .metric-row {
+      @media (max-width: 700px) {
+        .metrics {
           grid-template-columns: repeat(2, minmax(0, 1fr));
         }
 
-        .topbar {
-          flex-direction: column;
+        .header {
+          grid-template-columns: 1fr;
         }
       }
     </style>
   </head>
   <body>
-    <div class="frame">
-      <div class="screen">
-        <aside class="sidebar bevel">
-          <section class="crest bevel">
-            <div class="crest-mark">CL</div>
-            <h1>Cronan &amp; Locke Systems</h1>
-            <h2 id="tenant-bank">Loading...</h2>
-          </section>
+    <div class="machine">
+      <div class="machine-inner">
+        <div class="layout">
+          <aside class="sidebar panel">
+            <section class="bank-crest panel">
+              <div class="shield">WP</div>
+              <div class="bank-subtitle">WHISPERING</div>
+              <div class="bank-title">PINES BANK</div>
+            </section>
 
-          <nav class="nav bevel">
-            <div class="nav-item"><span class="nav-dot"></span>Bank Core</div>
-            <div class="nav-item active"><span class="nav-dot"></span>Accounts</div>
-            <div class="nav-item"><span class="nav-dot"></span>Transactions</div>
-            <div class="nav-item"><span class="nav-dot"></span>Vault Control</div>
-            <div class="nav-item"><span class="nav-dot"></span>Incidents</div>
-            <div class="nav-item"><span class="nav-dot"></span>Payroll</div>
-            <div class="nav-item"><span class="nav-dot"></span>ATM Network</div>
-            <div class="nav-item"><span class="nav-dot"></span>Audit Logs</div>
-          </nav>
+            <nav class="side-nav panel">
+              <div class="nav-link"><span class="nav-icon"></span>Bank Core</div>
+              <div class="nav-link active"><span class="nav-icon"></span>Accounts</div>
+              <div class="nav-link"><span class="nav-icon"></span>Transactions</div>
+              <div class="nav-link"><span class="nav-icon"></span>Vault Control</div>
+              <div class="nav-link"><span class="nav-icon"></span>Incidents</div>
+              <div class="nav-link"><span class="nav-icon"></span>Payroll</div>
+              <div class="nav-link"><span class="nav-icon"></span>ATM Network</div>
+              <div class="nav-link"><span class="nav-icon"></span>Audit Logs</div>
+            </nav>
 
-          <section class="tenant-box bevel">
-            <div class="label">Current Demo Tenant</div>
-            <div id="tenant-name" class="tenant-name">Loading...</div>
-            <div id="tenant-region" class="tenant-bank">Loading region...</div>
-            <button class="button-mini" type="button">Manage Tenant</button>
-          </section>
+            <section class="tenant-card panel">
+              <div class="side-label">Current Demo-Tenant</div>
+              <div id="tenant-name" class="tenant-name">Loading...</div>
+              <div id="tenant-bank" class="tenant-bank">Loading...</div>
+              <button type="button" class="control-button">Manage Tenant</button>
+            </section>
 
-          <section class="ops-box bevel">
-            <div class="label">Admin</div>
-            <div style="margin-top:8px; font-size:18px; color:#d4dbc7;">Roleplay Banking</div>
-            <div class="preview-note">All systems nominal in preview mode.</div>
-          </section>
-        </aside>
+            <section class="status-card panel">
+              <div class="side-label">Admin</div>
+              <div style="margin-top:8px; font-size:16px; color:#d4dbc8;">ROLEPLAY BANKING</div>
+              <div style="margin-top:12px; color:var(--text-dim); font-size:12px;">ALL SYSTEMS NOMINAL</div>
+            </section>
+          </aside>
 
-        <main class="main bevel">
-          <section class="topbar bevel">
-            <div>
-              <div class="brand">CRONAN &amp; LOCKE SYSTEMS</div>
-              <div class="preview-note">ADMIN TERMINAL</div>
-            </div>
-            <div class="terminal-status">
-              <div><strong>ADMIN TERMINAL - ONLINE</strong></div>
-              <div>USERNAME: ADMIN</div>
-              <div id="clock-line">DATE: --/--/---- TIME: --:--</div>
-            </div>
-          </section>
-
-          <div class="section-title">Admin Terminal</div>
-
-          <section class="metric-row">
-            <article class="metric-card bevel">
-              <div class="metric-name">Tenants</div>
-              <div id="metric-tenants" class="metric-value">0</div>
-            </article>
-            <article class="metric-card bevel">
-              <div class="metric-name">Accounts</div>
-              <div id="metric-accounts" class="metric-value">0</div>
-            </article>
-            <article class="metric-card bevel">
-              <div class="metric-name">Cards</div>
-              <div id="metric-cards" class="metric-value">0</div>
-            </article>
-            <article class="metric-card bevel">
-              <div class="metric-name">Active Incidents</div>
-              <div id="metric-incidents" class="metric-value">0</div>
-            </article>
-            <article class="metric-card bevel">
-              <div class="metric-name">Due Fines</div>
-              <div id="metric-fines" class="metric-value">0</div>
-            </article>
-            <article class="metric-card bevel">
-              <div class="metric-name">Active Loans</div>
-              <div id="metric-loans" class="metric-value">0</div>
-            </article>
-          </section>
-
-          <section class="content">
-            <div class="panel-wrap bevel">
-              <div class="terminal-head">Accounts</div>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Account ID</th>
-                    <th>Customer</th>
-                    <th>Balance</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody id="accounts-body"></tbody>
-              </table>
-
-              <div class="logs">
-                <div class="terminal-head">Logs</div>
-                <div id="log-stream" class="log-stream"></div>
+          <main class="main panel">
+            <section class="header panel">
+              <div class="header-title">CRONAN &amp; LOCKE SYSTEMS</div>
+              <div class="header-status">
+                <div><strong>ADMIN TERMINAL - ONLINE</strong></div>
+                <div>USERNAME: ADMIN</div>
+                <div id="clock-line">DATE: --/--/---- TIME: --:--</div>
               </div>
-            </div>
+            </section>
 
-            <div class="stack">
-              <section class="incident-shell bevel">
-                <div class="incident-alert">[!] Vault Incident Detected</div>
+            <div class="section-bar">Admin Terminal</div>
+
+            <section class="metrics">
+              <article class="metric-box panel">
+                <div class="metric-name">Tenants</div>
+                <div id="metric-tenants" class="metric-value">0</div>
+              </article>
+              <article class="metric-box panel">
+                <div class="metric-name">Accounts</div>
+                <div id="metric-accounts" class="metric-value">0</div>
+              </article>
+              <article class="metric-box panel">
+                <div class="metric-name">Cards</div>
+                <div id="metric-cards" class="metric-value">0</div>
+              </article>
+              <article class="metric-box panel">
+                <div class="metric-name">Active Incidents</div>
+                <div id="metric-incidents" class="metric-value">0</div>
+              </article>
+              <article class="metric-box panel">
+                <div class="metric-name">Due Fines</div>
+                <div id="metric-fines" class="metric-value">0</div>
+              </article>
+              <article class="metric-box panel">
+                <div class="metric-name">Active Loans</div>
+                <div id="metric-loans" class="metric-value">0</div>
+              </article>
+            </section>
+
+            <section class="work">
+              <section class="accounts-panel panel">
+                <div class="terminal-title">Accounts</div>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Account ID</th>
+                      <th>Customer</th>
+                      <th>Balance</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="accounts-body"></tbody>
+                </table>
+                <div class="subfoot">
+                  <div id="accounts-foot">Showing 0 accounts</div>
+                  <div>Prev 1 Next</div>
+                </div>
+
+                <div class="logs">
+                  <div class="terminal-title">Logs</div>
+                  <div id="log-list" class="log-list"></div>
+                </div>
+              </section>
+
+              <section class="incident-panel panel">
+                <div class="alert-box">[!] Vault Incident Detected</div>
+
                 <div class="incident-grid">
-                  <div class="incident-row">
-                    <div class="key">ID</div>
-                    <div id="incident-id" class="value">-</div>
+                  <div class="incident-line">
+                    <div class="k">ID</div>
+                    <div id="incident-id" class="v">-</div>
                   </div>
-                  <div class="incident-row">
-                    <div class="key">Status</div>
-                    <div id="incident-stage" class="value danger">-</div>
+                  <div class="incident-line">
+                    <div class="k">Status</div>
+                    <div id="incident-stage" class="v hot">-</div>
                   </div>
-                  <div class="incident-row">
-                    <div class="key">Unit</div>
-                    <div id="incident-unit" class="value">-</div>
+                  <div class="incident-line">
+                    <div class="k">Unit</div>
+                    <div id="incident-unit" class="v">-</div>
                   </div>
-                  <div class="incident-row">
-                    <div class="key">Last Event</div>
-                    <div id="incident-update" class="value" style="font-size:14px;">-</div>
+                  <div class="incident-line">
+                    <div class="k">Last Event</div>
+                    <div id="incident-update" class="v small">-</div>
                   </div>
                 </div>
 
-                <button id="dispatch-btn" class="action-btn" type="button">Dispatch Police</button>
-                <button id="lock-btn" class="action-btn danger" type="button">Lock Vault</button>
-                <button id="shutdown-btn" class="action-btn" type="button">Shutdown ATM Network</button>
+                <button id="dispatch-btn" class="action" type="button">Dispatch Police</button>
+                <button id="lock-btn" class="action danger" type="button">Lock Vault</button>
+                <button id="shutdown-btn" class="action" type="button">Shutdown ATM Network</button>
               </section>
+            </section>
 
-              <section class="ticker bevel">
-                <div class="ticker-line">
-                  <span class="divider">Preview:</span> GitHub Pages visual console reading the repo snapshot.
-                </div>
-                <div class="ticker-line">
-                  <span class="divider">Live mode later:</span> same layout can sit on top of the Node admin app and API.
-                </div>
-              </section>
-            </div>
-          </section>
-
-          <section class="ticker bevel">
-            <div id="bottom-log-1" class="ticker-line">[--:--:--] Awaiting system events</div>
-            <div id="bottom-log-2" class="ticker-line">[--:--:--] Awaiting system events</div>
-            <div id="bottom-log-3" class="ticker-line">[--:--:--] Awaiting system events</div>
-          </section>
-        </main>
+            <section class="ticker-panel panel">
+              <div id="bottom-log-1" class="ticker-line">[--:--:--] Awaiting system events</div>
+              <div id="bottom-log-2" class="ticker-line">[--:--:--] Awaiting system events</div>
+              <div id="bottom-log-3" class="ticker-line">[--:--:--] Awaiting system events</div>
+            </section>
+          </main>
+        </div>
       </div>
     </div>
 
     <script>
-      const state = {
+      const previewState = {
         store: null,
         incident: null,
         logs: []
       };
 
-      function formatTime(date) {
-        return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+      function setClock() {
+        const now = new Date();
+        const text = "DATE: " + (now.getMonth() + 1) + "/" + now.getDate() + "/" + now.getFullYear()
+          + " TIME: " + now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+        document.getElementById("clock-line").textContent = text;
       }
 
-      function formatClock(date) {
-        return "DATE: " + (date.getMonth() + 1) + "/" + date.getDate() + "/" + date.getFullYear()
-          + " TIME: " + date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+      function stamp() {
+        return "[" + new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }) + "]";
       }
 
-      function nowStamp() {
-        return "[" + formatTime(new Date()) + "]";
+      function addLog(line) {
+        previewState.logs.unshift(stamp() + " " + line);
+        previewState.logs = previewState.logs.slice(0, 8);
+        renderLogPanels();
       }
 
-      function addLog(message) {
-        state.logs.unshift(nowStamp() + " " + message);
-        state.logs = state.logs.slice(0, 8);
-        renderLogs();
-      }
-
-      function renderMetrics(store) {
-        const tenants = store.tenants || [];
-        const accounts = store.accounts || [];
-        const cards = store.cards || [];
-        const incidents = store.vault_incidents || [];
-        const fines = store.fines || [];
-        const loans = store.loans || [];
-
-        document.getElementById("metric-tenants").textContent = tenants.length;
-        document.getElementById("metric-accounts").textContent = accounts.length;
-        document.getElementById("metric-cards").textContent = cards.length;
-        document.getElementById("metric-incidents").textContent = incidents.filter((item) => item.state === "ACTIVE").length;
-        document.getElementById("metric-fines").textContent = fines.filter((item) => item.status === "DUE").length;
-        document.getElementById("metric-loans").textContent = loans.filter((item) => item.status === "ACTIVE").length;
+      function renderLogPanels() {
+        const logs = previewState.logs.length ? previewState.logs : ["[--:--:--] Awaiting system events"];
+        document.getElementById("log-list").innerHTML = logs.map((line) => `<div class="log-item">${line}</div>`).join("");
+        document.getElementById("bottom-log-1").textContent = logs[0] || "[--:--:--] Awaiting system events";
+        document.getElementById("bottom-log-2").textContent = logs[1] || "[--:--:--] Awaiting system events";
+        document.getElementById("bottom-log-3").textContent = logs[2] || "[--:--:--] Awaiting system events";
       }
 
       function renderTenant(store) {
         const tenant = (store.tenants || [])[0];
-        const region = (store.regions || [])[0];
-
         document.getElementById("tenant-name").textContent = tenant ? tenant.name.toUpperCase() : "NO TENANT";
         document.getElementById("tenant-bank").textContent = tenant ? tenant.bank_name.toUpperCase() : "NO BANK";
-        document.getElementById("tenant-region").textContent = region ? region.name.toUpperCase() : "NO REGION";
+      }
+
+      function renderMetrics(store) {
+        const tenants = (store.tenants || []).length;
+        const accounts = (store.accounts || []).length;
+        const cards = (store.cards || []).length;
+        const incidents = (store.vault_incidents || []).filter((item) => item.state === "ACTIVE").length;
+        const fines = (store.fines || []).filter((item) => item.status === "DUE").length;
+        const loans = (store.loans || []).filter((item) => item.status === "ACTIVE").length;
+
+        document.getElementById("metric-tenants").textContent = tenants;
+        document.getElementById("metric-accounts").textContent = accounts;
+        document.getElementById("metric-cards").textContent = cards;
+        document.getElementById("metric-incidents").textContent = incidents;
+        document.getElementById("metric-fines").textContent = fines;
+        document.getElementById("metric-loans").textContent = loans;
       }
 
       function renderAccounts(store) {
-        const tbody = document.getElementById("accounts-body");
-        const accounts = (store.accounts || []).map((account) => {
-          return `
-            <tr>
-              <td>${account.account_id}</td>
-              <td>${account.customer_name}</td>
-              <td class="balance">L$${account.balance}</td>
-              <td><span class="status-chip">${account.status}</span></td>
-            </tr>
-          `;
-        }).join("");
-        tbody.innerHTML = accounts;
+        const accounts = store.accounts || [];
+        document.getElementById("accounts-body").innerHTML = accounts.map((account) => `
+          <tr>
+            <td>${account.account_id}</td>
+            <td>${account.customer_name}</td>
+            <td class="money">L$${account.balance}</td>
+            <td><span class="chip">${account.status}</span></td>
+          </tr>
+        `).join("");
+        document.getElementById("accounts-foot").textContent = "Showing " + accounts.length + " out of " + accounts.length + " accounts";
       }
 
       function renderIncident() {
-        const incident = state.incident;
+        const incident = previewState.incident;
         if (!incident) {
           return;
         }
@@ -659,68 +685,58 @@
         document.getElementById("incident-id").textContent = incident.incident_id;
         document.getElementById("incident-stage").textContent = incident.stage;
         document.getElementById("incident-unit").textContent = incident.responding_unit;
-        document.getElementById("incident-update").textContent = incident.last_update;
-      }
-
-      function renderLogs() {
-        const logStream = document.getElementById("log-stream");
-        const lines = state.logs.length ? state.logs : ["[--:--:--] No recent events"];
-        logStream.innerHTML = lines.map((line) => `<div class="log-line">${line}</div>`).join("");
-
-        document.getElementById("bottom-log-1").textContent = lines[0] || "[--:--:--] Awaiting system events";
-        document.getElementById("bottom-log-2").textContent = lines[1] || "[--:--:--] Awaiting system events";
-        document.getElementById("bottom-log-3").textContent = lines[2] || "[--:--:--] Awaiting system events";
+        document.getElementById("incident-update").textContent = incident.last_update.toUpperCase();
       }
 
       function seedLogs(store) {
-        const transactions = store.transactions || [];
-        const audits = store.audit_logs || [];
-        const seeded = [];
-
-        transactions.slice(0, 3).forEach((txn) => {
-          seeded.push(nowStamp() + " " + txn.type + " - L$" + txn.amount + " - " + txn.account_id);
+        const lines = [];
+        (store.transactions || []).slice(0, 2).forEach((txn) => {
+          lines.push(stamp() + " " + txn.type + " - L$" + txn.amount + " - " + txn.account_id);
         });
-
-        audits.slice(0, 2).forEach((audit) => {
-          seeded.push(nowStamp() + " " + audit.action + " - " + (audit.target_account_id || audit.object_id));
+        (store.audit_logs || []).slice(0, 1).forEach((audit) => {
+          lines.push(stamp() + " " + audit.action + " - " + (audit.target_account_id || audit.object_id));
         });
-
-        if (state.incident) {
-          seeded.push(nowStamp() + " Vault Alarm Triggered - " + state.incident.incident_id);
+        const incident = (store.vault_incidents || [])[0];
+        if (incident) {
+          lines.push(stamp() + " Vault Alarm Triggered");
         }
-
-        state.logs = seeded.slice(0, 8);
-        renderLogs();
+        previewState.logs = lines;
+        renderLogPanels();
       }
 
       function wireActions() {
         document.getElementById("dispatch-btn").addEventListener("click", () => {
-          if (!state.incident) return;
-          state.incident.stage = "UNIT DISPATCHED";
-          state.incident.responding_unit = "UNIT 12";
-          state.incident.last_update = "Dispatch acknowledged. Unit 12 en route.";
+          if (!previewState.incident) {
+            return;
+          }
+          previewState.incident.stage = "UNIT DISPATCHED";
+          previewState.incident.responding_unit = "UNIT 12";
+          previewState.incident.last_update = "Dispatch authorized. Unit 12 en route.";
           renderIncident();
-          addLog("Police dispatch sent to " + state.incident.vault_id);
+          addLog("Police dispatch sent to " + previewState.incident.vault_id);
         });
 
         document.getElementById("lock-btn").addEventListener("click", () => {
-          if (!state.incident) return;
-          state.incident.stage = "LOCKDOWN TRIGGERED";
-          state.incident.last_update = "Remote lockdown authorized from admin terminal.";
+          if (!previewState.incident) {
+            return;
+          }
+          previewState.incident.stage = "LOCKDOWN TRIGGERED";
+          previewState.incident.last_update = "Remote vault lockdown authorized from admin terminal.";
           renderIncident();
-          addLog("Vault lockdown triggered for " + state.incident.vault_id);
+          addLog("Vault lockdown triggered for " + previewState.incident.vault_id);
         });
 
         document.getElementById("shutdown-btn").addEventListener("click", () => {
-          addLog("ATM network shutdown command queued for demo tenant");
+          addLog("ATM network shutdown queued for demo tenant");
         });
       }
 
       async function boot() {
         const response = await fetch("./services/api/data/store.json");
         const store = await response.json();
-        state.store = store;
-        state.incident = (store.vault_incidents || [])[0] || null;
+
+        previewState.store = store;
+        previewState.incident = (store.vault_incidents || [])[0] || null;
 
         renderTenant(store);
         renderMetrics(store);
@@ -728,12 +744,8 @@
         renderIncident();
         seedLogs(store);
         wireActions();
-
-        const tick = () => {
-          document.getElementById("clock-line").textContent = formatClock(new Date());
-        };
-        tick();
-        setInterval(tick, 1000);
+        setClock();
+        setInterval(setClock, 1000);
       }
 
       boot();
