@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cronan & Locke Systems</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500&family=Roboto+Mono&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./style.css?v=3">
+
+</head>
+<body>
+
+<div class="container">
+
+    <div class="sidebar">
+        <div class="bank-badge">
+            <div class="bank-mark">WP</div>
+            <h2>WHISPERING PINES</h2>
+            <div class="bank-sub">BANK</div>
+        </div>
+
+        <button class="nav active" data-tab="accounts">ACCOUNTS</button>
+        <button class="nav" data-tab="transactions">TRANSACTIONS</button>
+        <button class="nav" data-tab="incidents">INCIDENTS</button>
+        <button class="nav" data-tab="atm">ATM NETWORK</button>
+        <button class="nav" data-tab="payroll">PAYROLL</button>
+        <button class="nav" data-tab="audit">AUDIT LOGS</button>
+
+        <div class="tenant-box">
+            <div class="tenant-label">CURRENT DEMO-TENANT</div>
+            <div class="tenant-name">WHISPERING PINES BANK</div>
+            <button class="manage-btn" type="button">MANAGE TENANT</button>
+        </div>
+
+        <div class="admin-box">
+            <div class="admin-label">ADMIN</div>
+            <div class="admin-title">ROLEPLAY BANKING</div>
+            <div class="admin-status">ALL SYSTEMS NOMINAL</div>
+        </div>
+    </div>
+
+    <div class="main">
+
+        <div class="header">
+            <h1>CRONAN & LOCKE SYSTEMS</h1>
+            <div class="header-right">
+                <div id="systemStatus">ADMIN TERMINAL - ONLINE</div>
+                <div class="username">USERNAME: ADMIN</div>
+                <div id="clockLine" class="clock-line">DATE: --/--/---- TIME: --:--</div>
+            </div>
+        </div>
+
+        <div class="stats">
+            <div class="card">Tenants<br><b id="statTenants">0</b></div>
+            <div class="card">Accounts<br><b id="statAccounts">0</b></div>
+            <div class="card">Cards<br><b id="statCards">0</b></div>
+            <div class="card">Active Incidents<br><b id="statIncidents">0</b></div>
+            <div class="card">Due Fines<br><b id="statFines">0</b></div>
+            <div class="card">Active Loans<br><b id="statLoans">0</b></div>
+        </div>
+
+        <div class="workspace">
+            <div class="left-column">
+                <div class="panel active" id="accounts">
+                    <h2>ACCOUNTS</h2>
+                    <table id="accountsTable">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Name</th>
+                                <th>Balance</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+
+                <div class="panel" id="transactions">
+                    <h2>TRANSACTIONS</h2>
+                    <div id="transactionsBox" class="scroll-box"></div>
+                </div>
+
+                <div class="panel" id="incidents">
+                    <h2>VAULT INCIDENTS</h2>
+                    <div id="incidentBox"></div>
+                </div>
+
+                <div class="panel" id="atm">
+                    <h2>ATM NETWORK</h2>
+                    <table id="atmTable">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Name</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+
+                <div class="panel" id="payroll">
+                    <h2>PAYROLL</h2>
+                    <div id="payrollBox" class="scroll-box"></div>
+                    <button class="wide-btn" onclick="runPayroll()">RUN PAYROLL</button>
+                </div>
+
+                <div class="panel" id="audit">
+                    <h2>AUDIT LOGS</h2>
+                    <div id="logs"></div>
+                </div>
+            </div>
+
+            <div class="right-column">
+                <div class="incident-terminal">
+                    <div class="incident-alert">[!] VAULT INCIDENT DETECTED</div>
+                    <div id="incidentSummary" class="incident-summary"></div>
+                    <button class="wide-btn" onclick="dispatchActive()">DISPATCH POLICE</button>
+                    <button class="wide-btn danger" onclick="lockVault()">LOCK VAULT</button>
+                    <button class="wide-btn" onclick="shutdownATMNetwork()">SHUTDOWN ATM NETWORK</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="bottomTicker" class="bottom-ticker"></div>
+
+    </div>
+
+</div>
+
+<script src="./app.js?v=3"></script>
+</body>
+</html>
