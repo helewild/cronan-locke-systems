@@ -22,3 +22,11 @@ Current scaffold:
 - `index.html`
 
 This is only a placeholder shell for the future admin surface.
+
+Current view areas:
+
+- tenant summary
+- account snapshot
+- card snapshot
+- vault incidents
+- audit activity

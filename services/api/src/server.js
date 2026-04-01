@@ -1,9 +1,14 @@
 import http from "node:http";
 import { config } from "./config.js";
 import { handleAccounts } from "./routes/accounts.js";
+import { handleAuditLogs } from "./routes/auditLogs.js";
+import { handleCards } from "./routes/cards.js";
+import { handleDashboard } from "./routes/dashboard.js";
 import { handleHealth } from "./routes/health.js";
+import { handleIncidentAction } from "./routes/incidentActions.js";
 import { handleIncidents } from "./routes/incidents.js";
 import { handleTenantSummary } from "./routes/tenant.js";
+import { handleTenants } from "./routes/tenants.js";
 import { sendJson } from "./lib/sendJson.js";
 
 const server = http.createServer((req, res) => {
@@ -17,12 +22,32 @@ const server = http.createServer((req, res) => {
     return handleTenantSummary(req, res);
   }
 
+  if (req.method === "GET" && url.pathname === "/api/v1/tenants") {
+    return handleTenants(req, res);
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/v1/dashboard") {
+    return handleDashboard(req, res);
+  }
+
   if (req.method === "GET" && url.pathname === "/api/v1/accounts") {
     return handleAccounts(req, res);
   }
 
+  if (req.method === "GET" && url.pathname === "/api/v1/cards") {
+    return handleCards(req, res);
+  }
+
   if (req.method === "GET" && url.pathname === "/api/v1/incidents") {
     return handleIncidents(req, res);
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/v1/audit-logs") {
+    return handleAuditLogs(req, res);
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/v1/incidents/action") {
+    return handleIncidentAction(req, res);
   }
 
   return sendJson(res, 404, {

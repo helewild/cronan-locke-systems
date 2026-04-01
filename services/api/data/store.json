@@ -1,0 +1,148 @@
+{
+  "tenants": [
+    {
+      "tenant_id": "demo-tenant",
+      "name": "Whispering Pines",
+      "bank_name": "Whispering Pines Bank",
+      "status": "ACTIVE",
+      "feature_flags": [
+        "base_banking",
+        "justice_and_fines",
+        "loans_and_credit",
+        "crime_and_security"
+      ]
+    }
+  ],
+  "regions": [
+    {
+      "region_id": "demo-region",
+      "tenant_id": "demo-tenant",
+      "name": "Whispering Pines Main Region",
+      "status": "ACTIVE"
+    }
+  ],
+  "branches": [
+    {
+      "branch_id": "main-branch",
+      "tenant_id": "demo-tenant",
+      "region_id": "demo-region",
+      "name": "Main Branch",
+      "status": "ACTIVE"
+    }
+  ],
+  "players": [
+    {
+      "player_id": "PLY-10001",
+      "tenant_id": "demo-tenant",
+      "avatar_name": "Xander Evergarden",
+      "status": "ACTIVE"
+    },
+    {
+      "player_id": "PLY-10002",
+      "tenant_id": "demo-tenant",
+      "avatar_name": "Avery Stone",
+      "status": "ACTIVE"
+    }
+  ],
+  "accounts": [
+    {
+      "account_id": "WPB-ACCT-10001",
+      "tenant_id": "demo-tenant",
+      "branch_id": "main-branch",
+      "player_id": "PLY-10001",
+      "customer_name": "Xander Evergarden",
+      "balance": 2845,
+      "cash_on_hand": 500,
+      "outstanding_fine": 75,
+      "loan_balance": 225,
+      "status": "ACTIVE"
+    },
+    {
+      "account_id": "WPB-ACCT-10002",
+      "tenant_id": "demo-tenant",
+      "branch_id": "main-branch",
+      "player_id": "PLY-10002",
+      "customer_name": "Avery Stone",
+      "balance": 1620,
+      "cash_on_hand": 140,
+      "outstanding_fine": 0,
+      "loan_balance": 0,
+      "status": "ACTIVE"
+    }
+  ],
+  "cards": [
+    {
+      "card_id": "WPB-CARD-20001",
+      "account_id": "WPB-ACCT-10001",
+      "card_number": "5326-1000-2000-0001",
+      "state": "ACTIVE"
+    }
+  ],
+  "transactions": [
+    {
+      "transaction_id": "WPB-TXN-50001",
+      "account_id": "WPB-ACCT-10001",
+      "type": "PAYROLL",
+      "amount": 900,
+      "direction": "IN",
+      "memo": "Weekly payroll"
+    },
+    {
+      "transaction_id": "WPB-TXN-50002",
+      "account_id": "WPB-ACCT-10001",
+      "type": "TRANSFER",
+      "amount": 150,
+      "direction": "OUT",
+      "memo": "Transfer to Mira Vale"
+    }
+  ],
+  "fines": [
+    {
+      "fine_id": "WPB-FINE-70001",
+      "account_id": "WPB-ACCT-10001",
+      "amount": 75,
+      "reference": "SPEEDING-204",
+      "status": "DUE"
+    }
+  ],
+  "loans": [
+    {
+      "loan_id": "WPB-LOAN-80001",
+      "account_id": "WPB-ACCT-10001",
+      "balance": 225,
+      "terms": "3 weeks at L$75 per week",
+      "status": "ACTIVE"
+    }
+  ],
+  "audit_logs": [
+    {
+      "audit_id": "WPB-AUD-30001",
+      "tenant_id": "demo-tenant",
+      "region_id": "demo-region",
+      "branch_id": "main-branch",
+      "object_id": "teller-001",
+      "object_type": "teller",
+      "actor_name": "Xander Evergarden",
+      "target_account_id": "WPB-ACCT-10001",
+      "action": "fine_accept",
+      "status": "approved",
+      "amount": 500,
+      "memo": "Speeding"
+    }
+  ],
+  "vault_incidents": [
+    {
+      "incident_id": "WPB-VLT-40001",
+      "tenant_id": "demo-tenant",
+      "region_id": "demo-region",
+      "branch_id": "main-branch",
+      "vault_id": "vault-001",
+      "state": "ACTIVE",
+      "stage": "BREACH STARTED",
+      "actor_name": "Unknown Suspect",
+      "responding_unit": "NONE",
+      "marked_cash_flag": false,
+      "last_update": "Silent alert received"
+    }
+  ]
+}

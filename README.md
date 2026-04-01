@@ -50,6 +50,7 @@ Current source files:
 - `docs/architecture.md`
 - `docs/api_contract.md`
 - `docs/event_schema.md`
+- `docs/backend_foundation.md`
 - `docs/workflow.md`
 - `docs/atm_test_checklist.md`
 

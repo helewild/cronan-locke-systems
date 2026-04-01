@@ -19,13 +19,19 @@ Current scaffold:
 
 - `package.json`
 - `.env.example`
+- `data/store.json`
 - `src/server.js`
 - `src/routes/`
-- `src/data/mockData.js`
+- `src/data/store.js`
 
 Current mock endpoints:
 
 - `GET /health`
+- `GET /api/v1/dashboard`
 - `GET /api/v1/tenant`
+- `GET /api/v1/tenants`
 - `GET /api/v1/accounts`
+- `GET /api/v1/cards`
 - `GET /api/v1/incidents`
+- `GET /api/v1/audit-logs`
+- `POST /api/v1/incidents/action`
