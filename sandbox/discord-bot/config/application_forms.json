@@ -1,0 +1,557 @@
+{
+  "default": {
+    "titlePrefix": "Apply:",
+    "fields": [
+      {
+        "key": "character_name",
+        "label": "Character Name",
+        "style": "short",
+        "required": true,
+        "maxLength": 60
+      },
+      {
+        "key": "character_age",
+        "label": "Character Age",
+        "style": "short",
+        "required": true,
+        "maxLength": 10
+      },
+      {
+        "key": "background",
+        "label": "Short Background",
+        "style": "paragraph",
+        "required": true,
+        "maxLength": 600
+      },
+      {
+        "key": "rp_goals",
+        "label": "What RP do you want to create?",
+        "style": "paragraph",
+        "required": true,
+        "maxLength": 600
+      }
+    ]
+  },
+  "roles": {
+    "citizen": {
+      "title": "Apply: Citizen",
+      "fields": [
+        {
+          "key": "secondlife_username",
+          "label": "SecondLife Username",
+          "style": "short",
+          "required": true,
+          "maxLength": 60
+        },
+        {
+          "key": "full_name",
+          "label": "First, Middle, Last Name",
+          "style": "short",
+          "required": true,
+          "maxLength": 100
+        },
+        {
+          "key": "dob_gender",
+          "label": "Date Of Birth (RL or SL) and Gender",
+          "style": "short",
+          "required": true,
+          "maxLength": 100
+        },
+        {
+          "key": "physical_description",
+          "label": "Height, Weight, Hair Color, Eye Color",
+          "style": "paragraph",
+          "required": true,
+          "maxLength": 400
+        },
+        {
+          "key": "address_po_box",
+          "label": "Address / PO Box (SL only)",
+          "style": "paragraph",
+          "required": true,
+          "maxLength": 400
+        }
+      ]
+    },
+    "business-owner": {
+      "title": "Apply: Business Owner",
+      "fields": [
+        {
+          "key": "secondlife_username",
+          "label": "SecondLife Username",
+          "style": "short",
+          "required": true,
+          "maxLength": 60
+        },
+        {
+          "key": "business_name",
+          "label": "Business Name",
+          "style": "short",
+          "required": true,
+          "maxLength": 100
+        },
+        {
+          "key": "business_type",
+          "label": "Business Type",
+          "style": "short",
+          "required": true,
+          "maxLength": 100
+        },
+        {
+          "key": "business_concept",
+          "label": "What will your business do?",
+          "style": "paragraph",
+          "required": true,
+          "maxLength": 600
+        },
+        {
+          "key": "location_staffing",
+          "label": "Location plans and staffing",
+          "style": "paragraph",
+          "required": true,
+          "maxLength": 600
+        }
+      ]
+    },
+    "business": {
+      "title": "Apply: Business Owner",
+      "fields": [
+        {
+          "key": "secondlife_username",
+          "label": "SecondLife Username",
+          "style": "short",
+          "required": true,
+          "maxLength": 60
+        },
+        {
+          "key": "business_name",
+          "label": "Business Name",
+          "style": "short",
+          "required": true,
+          "maxLength": 100
+        },
+        {
+          "key": "business_type",
+          "label": "Business Type",
+          "style": "short",
+          "required": true,
+          "maxLength": 100
+        },
+        {
+          "key": "business_concept",
+          "label": "What will your business do?",
+          "style": "paragraph",
+          "required": true,
+          "maxLength": 600
+        },
+        {
+          "key": "location_staffing",
+          "label": "Location plans and staffing",
+          "style": "paragraph",
+          "required": true,
+          "maxLength": 600
+        }
+      ]
+    },
+    "sheriffs-office": {
+      "title": "Apply: Sheriff's Office",
+      "fields": [
+        {
+          "key": "secondlife_username",
+          "label": "SecondLife Username",
+          "style": "short",
+          "required": true,
+          "maxLength": 60
+        },
+        {
+          "key": "character_name",
+          "label": "Character Name",
+          "style": "short",
+          "required": true,
+          "maxLength": 100
+        },
+        {
+          "key": "why_join_so",
+          "label": "Why do you want to join the Sheriff's Office?",
+          "style": "paragraph",
+          "required": true,
+          "maxLength": 600
+        },
+        {
+          "key": "law_enforcement_experience",
+          "label": "Do you have law enforcement RP experience?",
+          "style": "paragraph",
+          "required": true,
+          "maxLength": 600
+        },
+        {
+          "key": "availability_fit",
+          "label": "Availability and why you would be a good fit",
+          "style": "paragraph",
+          "required": true,
+          "maxLength": 600
+        }
+      ]
+    },
+    "officer": {
+      "title": "Apply: Sheriff's Office",
+      "fields": [
+        {
+          "key": "secondlife_username",
+          "label": "SecondLife Username",
+          "style": "short",
+          "required": true,
+          "maxLength": 60
+        },
+        {
+          "key": "character_name",
+          "label": "Character Name",
+          "style": "short",
+          "required": true,
+          "maxLength": 100
+        },
+        {
+          "key": "why_join_so",
+          "label": "Why do you want to join the Sheriff's Office?",
+          "style": "paragraph",
+          "required": true,
+          "maxLength": 600
+        },
+        {
+          "key": "law_enforcement_experience",
+          "label": "Do you have law enforcement RP experience?",
+          "style": "paragraph",
+          "required": true,
+          "maxLength": 600
+        },
+        {
+          "key": "availability_fit",
+          "label": "Availability and why you would be a good fit",
+          "style": "paragraph",
+          "required": true,
+          "maxLength": 600
+        }
+      ]
+    },
+    "medical": {
+      "title": "Apply: Medical",
+      "fields": [
+        {
+          "key": "secondlife_username",
+          "label": "SecondLife Username",
+          "style": "short",
+          "required": true,
+          "maxLength": 60
+        },
+        {
+          "key": "character_name",
+          "label": "Character Name",
+          "style": "short",
+          "required": true,
+          "maxLength": 100
+        },
+        {
+          "key": "position_interest",
+          "label": "Are you applying for Doctor or Nurse?",
+          "style": "short",
+          "required": true,
+          "maxLength": 60
+        },
+        {
+          "key": "why_join_medical",
+          "label": "Why do you want to join Medical?",
+          "style": "paragraph",
+          "required": true,
+          "maxLength": 600
+        },
+        {
+          "key": "medical_experience",
+          "label": "Do you have medical RP experience?",
+          "style": "paragraph",
+          "required": true,
+          "maxLength": 600
+        }
+      ]
+    },
+    "doctor": {
+      "title": "Apply: Medical",
+      "fields": [
+        {
+          "key": "secondlife_username",
+          "label": "SecondLife Username",
+          "style": "short",
+          "required": true,
+          "maxLength": 60
+        },
+        {
+          "key": "character_name",
+          "label": "Character Name",
+          "style": "short",
+          "required": true,
+          "maxLength": 100
+        },
+        {
+          "key": "position_interest",
+          "label": "Are you applying for Doctor or Nurse?",
+          "style": "short",
+          "required": true,
+          "maxLength": 60
+        },
+        {
+          "key": "why_join_medical",
+          "label": "Why do you want to join Medical?",
+          "style": "paragraph",
+          "required": true,
+          "maxLength": 600
+        },
+        {
+          "key": "medical_experience",
+          "label": "Do you have medical RP experience?",
+          "style": "paragraph",
+          "required": true,
+          "maxLength": 600
+        }
+      ]
+    },
+    "nurse": {
+      "title": "Apply: Medical",
+      "fields": [
+        {
+          "key": "secondlife_username",
+          "label": "SecondLife Username",
+          "style": "short",
+          "required": true,
+          "maxLength": 60
+        },
+        {
+          "key": "character_name",
+          "label": "Character Name",
+          "style": "short",
+          "required": true,
+          "maxLength": 100
+        },
+        {
+          "key": "position_interest",
+          "label": "Are you applying for Doctor or Nurse?",
+          "style": "short",
+          "required": true,
+          "maxLength": 60
+        },
+        {
+          "key": "why_join_medical",
+          "label": "Why do you want to join Medical?",
+          "style": "paragraph",
+          "required": true,
+          "maxLength": 600
+        },
+        {
+          "key": "medical_experience",
+          "label": "Do you have medical RP experience?",
+          "style": "paragraph",
+          "required": true,
+          "maxLength": 600
+        }
+      ]
+    },
+    "fire-depo": {
+      "title": "Apply: Fire Depo",
+      "fields": [
+        {
+          "key": "secondlife_username",
+          "label": "SecondLife Username",
+          "style": "short",
+          "required": true,
+          "maxLength": 60
+        },
+        {
+          "key": "character_name",
+          "label": "Character Name",
+          "style": "short",
+          "required": true,
+          "maxLength": 100
+        },
+        {
+          "key": "why_join_fire",
+          "label": "Why do you want to join Fire Depo?",
+          "style": "paragraph",
+          "required": true,
+          "maxLength": 600
+        },
+        {
+          "key": "fire_experience",
+          "label": "Do you have fire or rescue RP experience?",
+          "style": "paragraph",
+          "required": true,
+          "maxLength": 600
+        },
+        {
+          "key": "availability_fit",
+          "label": "Availability and why you are a good fit",
+          "style": "paragraph",
+          "required": true,
+          "maxLength": 600
+        }
+      ]
+    },
+    "media": {
+      "title": "Apply: Media",
+      "fields": [
+        {
+          "key": "secondlife_username",
+          "label": "SecondLife Username",
+          "style": "short",
+          "required": true,
+          "maxLength": 60
+        },
+        {
+          "key": "character_name",
+          "label": "Character Name",
+          "style": "short",
+          "required": true,
+          "maxLength": 100
+        },
+        {
+          "key": "media_focus",
+          "label": "What kind of media RP interests you?",
+          "style": "paragraph",
+          "required": true,
+          "maxLength": 600
+        },
+        {
+          "key": "content_style",
+          "label": "What kind of stories would you cover?",
+          "style": "paragraph",
+          "required": true,
+          "maxLength": 600
+        },
+        {
+          "key": "availability_fit",
+          "label": "Availability and why you are a good fit",
+          "style": "paragraph",
+          "required": true,
+          "maxLength": 600
+        }
+      ]
+    },
+    "events-team": {
+      "title": "Apply: Events Team",
+      "fields": [
+        {
+          "key": "secondlife_username",
+          "label": "SecondLife Username",
+          "style": "short",
+          "required": true,
+          "maxLength": 60
+        },
+        {
+          "key": "character_name",
+          "label": "Character Name",
+          "style": "short",
+          "required": true,
+          "maxLength": 100
+        },
+        {
+          "key": "event_interest",
+          "label": "Why do you want to join Events Team?",
+          "style": "paragraph",
+          "required": true,
+          "maxLength": 600
+        },
+        {
+          "key": "event_ideas",
+          "label": "What events would you like to help run?",
+          "style": "paragraph",
+          "required": true,
+          "maxLength": 600
+        },
+        {
+          "key": "availability_fit",
+          "label": "Availability and why you are a good fit",
+          "style": "paragraph",
+          "required": true,
+          "maxLength": 600
+        }
+      ]
+    },
+    "real-estate": {
+      "title": "Apply: Real Estate",
+      "fields": [
+        {
+          "key": "secondlife_username",
+          "label": "SecondLife Username",
+          "style": "short",
+          "required": true,
+          "maxLength": 60
+        },
+        {
+          "key": "character_name",
+          "label": "Character Name",
+          "style": "short",
+          "required": true,
+          "maxLength": 100
+        },
+        {
+          "key": "why_join_real_estate",
+          "label": "Why do you want to join Real Estate?",
+          "style": "paragraph",
+          "required": true,
+          "maxLength": 600
+        },
+        {
+          "key": "sales_ideas",
+          "label": "How would you help buy, sell, or rent?",
+          "style": "paragraph",
+          "required": true,
+          "maxLength": 600
+        },
+        {
+          "key": "availability_fit",
+          "label": "Availability and why you are a good fit",
+          "style": "paragraph",
+          "required": true,
+          "maxLength": 600
+        }
+      ]
+    },
+    "management": {
+      "title": "Apply: Management",
+      "fields": [
+        {
+          "key": "secondlife_username",
+          "label": "SecondLife Username",
+          "style": "short",
+          "required": true,
+          "maxLength": 60
+        },
+        {
+          "key": "character_name",
+          "label": "Character Name",
+          "style": "short",
+          "required": true,
+          "maxLength": 100
+        },
+        {
+          "key": "why_join_management",
+          "label": "Why do you want to join Management?",
+          "style": "paragraph",
+          "required": true,
+          "maxLength": 600
+        },
+        {
+          "key": "leadership_experience",
+          "label": "Do you have leadership or staff experience?",
+          "style": "paragraph",
+          "required": true,
+          "maxLength": 600
+        },
+        {
+          "key": "availability_fit",
+          "label": "Availability and why you are a good fit",
+          "style": "paragraph",
+          "required": true,
+          "maxLength": 600
+        }
+      ]
+    }
+  }
+}

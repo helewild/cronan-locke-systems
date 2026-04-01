@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Whispering Pines Control</title>
+    <link rel="stylesheet" href="/dashboard.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">Whispering Pines</p>
+          <h1>Control Dashboard</h1>
+          <p class="lede">Live server operations, rosters, cases, and registry activity in one place.</p>
+          <div class="server-switcher">
+            <label for="guild-selector">Server</label>
+            <select id="guild-selector"></select>
+          </div>
+        </div>
+        <div class="hero-card">
+          <div class="hero-label">Status</div>
+          <div id="hero-status" class="hero-value">Loading</div>
+          <div id="hero-subtitle" class="hero-subtitle">Fetching live guild data</div>
+        </div>
+      </header>
+
+      <main class="grid">
+        <section class="panel span-12">
+          <div class="panel-head">
+            <h2>Overview</h2>
+            <button id="refresh-button" class="action">Refresh</button>
+          </div>
+          <div id="overview-cards" class="stat-grid"></div>
+        </section>
+
+        <section class="panel span-7">
+          <div class="panel-head">
+            <h2>Recent Activity</h2>
+          </div>
+          <div id="activity-feed" class="activity-feed"></div>
+        </section>
+
+        <section class="panel span-5">
+          <div class="panel-head">
+            <h2>Health</h2>
+          </div>
+          <div id="health-panel" class="stack"></div>
+        </section>
+
+        <section class="panel span-12">
+          <div class="panel-head">
+            <h2>Case Search</h2>
+            <div class="search-row">
+              <input id="case-search" type="search" placeholder="Search case ID, member, role, channel, or reason" />
+              <button id="case-search-button" class="action">Search</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Case</th>
+                  <th>Bucket</th>
+                  <th>Summary</th>
+                  <th>Subject</th>
+                  <th>Status</th>
+                  <th>Created</th>
+                </tr>
+              </thead>
+              <tbody id="case-table"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="panel span-12">
+          <div class="panel-head">
+            <h2>Support Tickets</h2>
+          </div>
+          <div class="ticket-layout">
+            <div id="ticket-list" class="stack"></div>
+            <div class="ticket-detail">
+              <div id="ticket-detail-header" class="stack-card">Select a ticket to view it here.</div>
+              <div id="ticket-messages" class="ticket-messages"></div>
+              <form id="ticket-reply-form" class="control-form">
+                <input id="ticket-reply-actor" type="text" placeholder="Reply as (optional)" />
+                <input id="ticket-close-reason" type="text" placeholder="Close reason (optional)" />
+                <textarea id="ticket-reply-body" placeholder="Write a reply to the selected ticket"></textarea>
+                <button type="submit" class="action">Send Reply</button>
+                <button type="button" id="ticket-close-button" class="action danger-action">Close Ticket</button>
+              </form>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel span-12">
+          <div class="panel-head">
+            <h2>Application Forms</h2>
+          </div>
+          <div class="ticket-layout">
+            <div class="stack">
+              <div class="stack-card">
+                <label for="application-form-role"><strong>Form Target</strong></label>
+                <select id="application-form-role"></select>
+              </div>
+              <div class="stack-card dim">
+                Edit the modal title and the question labels here. Saving updates the next application popup without changing code.
+              </div>
+            </div>
+            <div class="ticket-detail">
+              <form id="application-form-editor" class="control-form">
+                <input id="application-form-title" type="text" placeholder="Modal title" />
+                <input id="application-form-title-prefix" type="text" placeholder="Title prefix (default form only)" />
+                <textarea id="application-form-fields" placeholder="Field config JSON array"></textarea>
+                <button type="submit" class="action">Save Form Config</button>
+              </form>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel span-12">
+          <div class="panel-head">
+            <h2>Server Settings</h2>
+          </div>
+          <div class="ticket-layout">
+            <div class="stack">
+              <div class="stack-card">
+                <label for="server-settings-scope"><strong>Editing Scope</strong></label>
+                <select id="server-settings-scope">
+                  <option value="guild">Current Server Override</option>
+                  <option value="default">Global Defaults</option>
+                </select>
+              </div>
+              <div id="server-settings-summary" class="stack-card dim">
+                Loading server settings...
+              </div>
+            </div>
+            <div class="ticket-detail">
+              <form id="server-settings-editor" class="control-form">
+                <input id="settings-server-name" type="text" placeholder="Server name" />
+                <input id="settings-verified-role" type="text" placeholder="Verified role name" />
+                <input id="settings-unverified-role" type="text" placeholder="Unverified role name" />
+                <input id="settings-staff-roles" type="text" placeholder="Staff roles (comma separated)" />
+                <input id="settings-review-roles" type="text" placeholder="Review roles (comma separated)" />
+                <input id="settings-verify-roles" type="text" placeholder="Verify roles (comma separated)" />
+                <input id="settings-role-manager-roles" type="text" placeholder="Role manager roles (comma separated)" />
+                <input id="settings-diagnostic-roles" type="text" placeholder="Diagnostic roles (comma separated)" />
+                <textarea id="settings-required-channels" placeholder="Required channels, one per line"></textarea>
+                <textarea id="settings-welcome-message" placeholder="Welcome message, one line per line"></textarea>
+                <textarea id="settings-application-targets" placeholder="Application targets JSON object"></textarea>
+                <textarea id="settings-application-buttons" placeholder="Application buttons JSON array"></textarea>
+                <textarea id="settings-roster-groups" placeholder="Roster groups JSON object"></textarea>
+                <textarea id="settings-dm-templates" placeholder="DM templates JSON object"></textarea>
+                <button type="submit" class="action">Save Server Settings</button>
+              </form>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel span-12">
+          <div class="panel-head">
+            <h2>Server Actions</h2>
+          </div>
+          <div class="ticket-layout">
+            <div class="stack">
+              <div class="stack-card dim">
+                Provisioning creates missing roles, required channels, and the private support categories from the active settings. It does not delete or rename existing items.
+              </div>
+            </div>
+            <div class="ticket-detail">
+              <div class="stack-card">
+                <button id="provision-server-button" class="action">Provision This Server</button>
+                <button id="post-panels-button" class="action" style="margin-left: 10px;">Post Panels</button>
+                <button id="seed-content-button" class="action" style="margin-left: 10px;">Seed Content</button>
+                <div id="provision-server-result" class="meta" style="margin-top: 12px;">No provisioning run yet.</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel span-6">
+          <div class="panel-head">
+            <h2>Business Registry</h2>
+          </div>
+          <form id="business-form" class="control-form">
+            <input id="business-name" type="text" placeholder="Business name" />
+            <select id="business-owner"></select>
+            <select id="business-license-status">
+              <option value="licensed">licensed</option>
+              <option value="pending">pending</option>
+              <option value="suspended">suspended</option>
+            </select>
+            <input id="business-actor" type="text" placeholder="Action by (optional)" />
+            <button type="submit" class="action">Save Business</button>
+          </form>
+          <div id="business-list" class="stack"></div>
+        </section>
+
+        <section class="panel span-6">
+          <div class="panel-head">
+            <h2>Announcements</h2>
+          </div>
+          <form id="announcement-form" class="control-form">
+            <select id="announcement-channel"></select>
+            <select id="announcement-type">
+              <option value="update">update</option>
+              <option value="event">event</option>
+              <option value="alert">alert</option>
+              <option value="maintenance">maintenance</option>
+            </select>
+            <input id="announcement-title" type="text" placeholder="Announcement title" />
+            <textarea id="announcement-body" placeholder="Announcement body"></textarea>
+            <input id="announcement-actor" type="text" placeholder="Posted by (optional)" />
+            <button type="submit" class="action">Post Announcement</button>
+          </form>
+          <div id="announcement-list" class="stack"></div>
+        </section>
+
+        <section class="panel span-12">
+          <div class="panel-head">
+            <h2>Rosters</h2>
+          </div>
+          <div id="roster-grid" class="roster-grid"></div>
+        </section>
+      </main>
+    </div>
+    <script src="/dashboard.js"></script>
+  </body>
+</html>

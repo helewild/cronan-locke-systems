@@ -1,0 +1,291 @@
+{
+  "default": {
+    "serverName": "Whispering Pines",
+    "roles": {
+      "staff": [
+        "Founder",
+        "Admin",
+        "Senior Staff",
+        "Moderator",
+        "Developer"
+      ],
+      "verified": "Verified",
+      "unverified": "Unverified",
+      "review": [
+        "Founder",
+        "Admin",
+        "Senior Staff",
+        "Developer"
+      ],
+      "verify": [
+        "Founder",
+        "Admin",
+        "Senior Staff"
+      ],
+      "roleManager": [
+        "Founder",
+        "Admin",
+        "Senior Staff"
+      ],
+      "diagnostics": [
+        "Founder",
+        "Admin",
+        "Senior Staff",
+        "Developer"
+      ]
+    },
+    "requiredChannels": [
+      "welcome",
+      "rules-and-guidelines",
+      "verify-and-roles",
+      "support-desk",
+      "server-lore",
+      "rp-guides",
+      "bot-logs",
+      "bot-changelog"
+    ],
+    "applicationTargets": {
+      "citizen": "Citizen",
+      "business": "Business Owner",
+      "business-owner": "Business Owner",
+      "lspd": "Sheriff's Office",
+      "sheriffs-office": "Sheriff's Office",
+      "sheriffs": "Sheriff's Office",
+      "bcso": "BCSO",
+      "ems": "Medical",
+      "medical": "Medical",
+      "safr/ems": "Medical",
+      "safr": "Medical",
+      "fire": "Fire Department",
+      "fire-department": "Fire Department",
+      "fire-depo": "Fire Department",
+      "doj": "DOJ",
+      "media": "Media",
+      "events-team": "Events Team",
+      "events": "Events Team",
+      "real-estate": "Real Estate",
+      "management": "Management",
+      "verified": "Verified"
+    },
+    "applicationButtons": [
+      [
+        {
+          "key": "citizen",
+          "label": "Citizen",
+          "style": "Secondary"
+        },
+        {
+          "key": "business-owner",
+          "label": "Business Owner",
+          "style": "Secondary"
+        },
+        {
+          "key": "sheriffs-office",
+          "label": "Sheriff's Office",
+          "style": "Primary"
+        },
+        {
+          "key": "bcso",
+          "label": "BCSO",
+          "style": "Primary"
+        },
+        {
+          "key": "medical",
+          "label": "Medical",
+          "style": "Success"
+        }
+      ],
+      [
+        {
+          "key": "fire-department",
+          "label": "Fire Depo",
+          "style": "Danger"
+        },
+        {
+          "key": "doj",
+          "label": "DOJ",
+          "style": "Secondary"
+        },
+        {
+          "key": "media",
+          "label": "Media",
+          "style": "Secondary"
+        },
+        {
+          "key": "events-team",
+          "label": "Events Team",
+          "style": "Secondary"
+        },
+        {
+          "key": "real-estate",
+          "label": "Real Estate",
+          "style": "Secondary"
+        }
+      ],
+      [
+        {
+          "key": "management",
+          "label": "Management",
+          "style": "Secondary"
+        },
+        {
+          "key": "business",
+          "label": "Business Access",
+          "style": "Secondary"
+        }
+      ]
+    ],
+    "rosterGroups": {
+      "lspd": [
+        "Sheriff's Office"
+      ],
+      "sheriffs-office": [
+        "Sheriff's Office"
+      ],
+      "bcso": [
+        "BCSO"
+      ],
+      "ems": [
+        "Medical"
+      ],
+      "medical": [
+        "Medical"
+      ],
+      "fire": [
+        "Fire Department"
+      ],
+      "fire-department": [
+        "Fire Department"
+      ],
+      "doj": [
+        "DOJ"
+      ],
+      "media": [
+        "Media"
+      ],
+      "events-team": [
+        "Events Team"
+      ],
+      "real-estate": [
+        "Real Estate"
+      ],
+      "management": [
+        "Management"
+      ],
+      "business": [
+        "Business Owner"
+      ],
+      "staff": [
+        "Founder",
+        "Admin",
+        "Senior Staff",
+        "Moderator",
+        "Developer"
+      ]
+    },
+    "onboarding": {
+      "welcomeMessage": [
+        "Welcome to Whispering Pines.",
+        "",
+        "To get access to the full server:",
+        "1. Read the rules and lore channels",
+        "2. Go to #verify-and-roles",
+        "3. Request verification or use the application panel if you need a faction/business path",
+        "",
+        "If you get stuck, use #support-desk."
+      ],
+      "verifiedDm": "You have been verified in Whispering Pines. You should now have access to the main server.",
+      "unverifiedDm": "Your Verified status in Whispering Pines has been removed. Contact staff if you believe this was a mistake.",
+      "waitingDm": "Your **{role}** application in Whispering Pines needs more information. Staff note: {note}",
+      "approvedDm": "Your **{role}** application in Whispering Pines was approved.",
+      "deniedDm": "Your **{role}** application in Whispering Pines was denied. Reason: {reason}",
+      "disciplineDm": "A staff action was recorded for you in Whispering Pines. Action: {action}. Reason: {reason}"
+    }
+  },
+  "guilds": {
+    "1419084310312648824": {},
+    "1481805474943996006": {
+      "serverName": "Whispering Pines SL",
+      "roles": {
+        "staff": ["Owner", "Admin", "Moderator", "Storyteller"],
+        "verified": "Resident",
+        "unverified": "Resident Applicant",
+        "review": ["Owner", "Admin", "Storyteller"],
+        "verify": ["Owner", "Admin", "Moderator"],
+        "roleManager": ["Owner", "Admin"],
+        "diagnostics": ["Owner", "Admin", "Moderator", "Storyteller"]
+      },
+      "requiredChannels": [
+        "welcome",
+        "rules",
+        "announcements",
+        "important-links",
+        "sim-info",
+        "lore",
+        "general-chat",
+        "town-square",
+        "support-desk",
+        "verify-and-roles"
+      ],
+        "applicationTargets": {
+          "citizen": "Resident",
+          "business": "Business Owner",
+          "business-owner": "Business Owner",
+          "sheriffs-office": "Officer",
+          "sheriffs": "Officer",
+          "bcso": null,
+          "medical": "Doctor",
+          "fire-depo": "Fire Depo",
+          "doj": null,
+          "media": "Media",
+          "events-team": "Events Team",
+          "real-estate": "Real Estate",
+          "management": "Management",
+          "fire": "Fire Depo",
+          "events": "Events Team"
+        },
+        "applicationButtons": [
+          [
+            { "key": "citizen", "label": "Resident", "style": "Secondary" },
+            { "key": "business-owner", "label": "Business Owner", "style": "Secondary" },
+            { "key": "sheriffs-office", "label": "Sheriff's Office", "style": "Primary" },
+            { "key": "medical", "label": "Medical", "style": "Success" },
+            { "key": "fire-depo", "label": "Fire Depo", "style": "Danger" }
+          ],
+          [
+            { "key": "media", "label": "Media", "style": "Primary" },
+            { "key": "events-team", "label": "Events Team", "style": "Success" },
+            { "key": "real-estate", "label": "Real Estate", "style": "Secondary" },
+            { "key": "management", "label": "Management", "style": "Secondary" }
+          ]
+        ],
+        "rosterGroups": {
+          "sheriffs-office": ["Chief Of Police", "Detective", "Officer", "Dispatcher"],
+          "bcso": [],
+          "medical": ["Doctor", "Nurse"],
+          "doj": [],
+          "business": ["Business Owner"],
+          "government": ["Mayor"],
+          "staff": ["Owner", "Admin", "Moderator", "Storyteller"]
+        },
+      "onboarding": {
+        "welcomeMessage": [
+          "Welcome to Whispering Pines SL.",
+          "",
+          "To get access to the full server:",
+          "1. Read the rules and lore channels",
+          "2. Visit #verify-and-roles for role and application help",
+          "3. Use #support-desk if you need setup or ticket help",
+          "",
+          "If you get stuck, use #support-desk."
+        ],
+        "verifiedDm": "You have been added as a Resident in Whispering Pines SL.",
+        "unverifiedDm": "Your Resident access in Whispering Pines SL has been removed. Contact staff if you believe this was a mistake.",
+        "waitingDm": "Your **{role}** application in Whispering Pines SL needs more information. Staff note: {note}",
+        "approvedDm": "Your **{role}** application in Whispering Pines SL was approved.",
+        "deniedDm": "Your **{role}** application in Whispering Pines SL was denied. Reason: {reason}",
+        "disciplineDm": "A staff action was recorded for you in Whispering Pines SL. Action: {action}. Reason: {reason}"
+      }
+    }
+  }
+}

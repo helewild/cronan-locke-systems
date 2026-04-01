@@ -1,0 +1,35 @@
+# Node
+node_modules/
+npm-debug.log*
+
+# Env
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.pyc
+
+# Local data
+*.sqlite
+*.db
+
+# Build outputs
+dist/
+build/
+.next/
+
+# Sandbox runtime data
+sandbox/**/data/
+sandbox/**/backups/
+
+# Coverage
+coverage/
