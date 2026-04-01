@@ -80,6 +80,14 @@
   ],
   "transactions": [
     {
+      "transaction_id": "WPB-TXN-50003",
+      "account_id": "WPB-ACCT-10001",
+      "type": "DEPOSIT",
+      "amount": 100,
+      "direction": "IN",
+      "memo": "Deposit"
+    },
+    {
       "transaction_id": "WPB-TXN-50001",
       "account_id": "WPB-ACCT-10001",
       "type": "PAYROLL",

@@ -30,6 +30,8 @@ export function updateCollection(name, items) {
   return store[name];
 }
 
+export { writeStore };
+
 export function replaceIncident(incidentId, updates) {
   const store = readStore();
   const next = store.vault_incidents.map((incident) => {

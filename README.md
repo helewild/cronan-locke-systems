@@ -51,6 +51,7 @@ Current source files:
 - `docs/api_contract.md`
 - `docs/event_schema.md`
 - `docs/backend_foundation.md`
+- `docs/integration_progress.md`
 - `docs/workflow.md`
 - `docs/atm_test_checklist.md`
 

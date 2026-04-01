@@ -71,6 +71,16 @@ Every backend response should return:
 }
 ```
 
+## General Action Endpoint
+
+For the first implementation pass, the backend may expose a generic action route:
+
+- `POST /api/v1/actions`
+
+This route can accept the common request envelope and branch on `action`.
+
+That is useful while the object suite is still being migrated from mock mode because it lets the LSL scripts keep one request pattern while the backend surface is still evolving.
+
 ## ATM Endpoints
 
 Recommended ATM actions:

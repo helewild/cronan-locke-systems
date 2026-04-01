@@ -32,6 +32,8 @@ Current mock endpoints:
 - `GET /api/v1/tenants`
 - `GET /api/v1/accounts`
 - `GET /api/v1/cards`
+- `GET /api/v1/transactions`
 - `GET /api/v1/incidents`
 - `GET /api/v1/audit-logs`
+- `POST /api/v1/actions`
 - `POST /api/v1/incidents/action`
