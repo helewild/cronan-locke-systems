@@ -1,6 +1,6 @@
-# API Service
+# Cronan & Locke Systems API Service
 
-Placeholder for the future Whispering Pines backend.
+Placeholder for the future Cronan & Locke Systems backend.
 
 This service will eventually own:
 

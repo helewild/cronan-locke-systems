@@ -1,6 +1,6 @@
-# Whispering Pines Platform Architecture
+# Cronan & Locke Systems Architecture
 
-This document turns the current mock object set into a shared platform pattern that can survive the move to a hosted backend later.
+This document turns the current mock object set into a shared Cronan & Locke Systems platform pattern that can survive the move to a hosted backend later.
 
 ## Current Object Set
 
@@ -9,6 +9,10 @@ This document turns the current mock object set into a shared platform pattern t
 - `scripts/card/card_mock.lsl`
 - `scripts/hud/hud_mock.lsl`
 - `scripts/vault/vault_mock.lsl`
+
+Current demo tenant:
+
+- `Whispering Pines`
 
 ## Core Rule
 

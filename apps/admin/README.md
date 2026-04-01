@@ -1,4 +1,4 @@
-# Admin App
+# Cronan & Locke Systems Admin App
 
 Placeholder for the future web admin panel.
 

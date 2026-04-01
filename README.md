@@ -1,6 +1,6 @@
-# Whispering Pines Platform
+# Cronan & Locke Systems
 
-Monorepo for the Whispering Pines Second Life RP banking platform.
+Monorepo for the Cronan & Locke Systems Second Life RP banking platform.
 
 ## What Lives Here
 
@@ -23,6 +23,10 @@ Working mock-mode object shells exist for:
 - HUD/mobile banking
 - Vault and robbery
 - Security terminal
+
+Current demo tenant and in-world branding:
+
+- Whispering Pines Bank
 
 Current source files:
 
@@ -57,6 +61,14 @@ This repo is set up as a single home for:
 - admin website planning and implementation
 - contracts and shared schemas
 - infrastructure notes
+
+Platform brand:
+
+- `Cronan & Locke Systems`
+
+Current example tenant:
+
+- `Whispering Pines`
 
 ## Suggested Next Milestones
 
