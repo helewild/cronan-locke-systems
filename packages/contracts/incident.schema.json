@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cronanlocke.systems/contracts/incident.schema.json",
+  "title": "VaultSecurityIncident",
+  "type": "object",
+  "required": [
+    "incident_id",
+    "tenant_id",
+    "region_id",
+    "branch_id",
+    "vault_id",
+    "state",
+    "stage",
+    "last_update"
+  ],
+  "properties": {
+    "incident_id": { "type": "string" },
+    "tenant_id": { "type": "string" },
+    "region_id": { "type": "string" },
+    "branch_id": { "type": "string" },
+    "vault_id": { "type": "string" },
+    "state": {
+      "type": "string",
+      "enum": ["ACTIVE", "RESOLVED", "CLOSED"]
+    },
+    "stage": {
+      "type": "string",
+      "enum": [
+        "BREACH STARTED",
+        "UNIT DISPATCHED",
+        "UNIT ON SCENE",
+        "SCENE CLEARED"
+      ]
+    },
+    "actor_name": { "type": "string" },
+    "responding_unit": { "type": "string" },
+    "marked_cash_flag": { "type": "boolean" },
+    "last_update": { "type": "string" }
+  },
+  "additionalProperties": true
+}

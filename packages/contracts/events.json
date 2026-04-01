@@ -1,0 +1,45 @@
+{
+  "banking": [
+    "balance_view",
+    "withdraw_request",
+    "deposit_request",
+    "transfer_request",
+    "statement_request",
+    "history_view"
+  ],
+  "teller": [
+    "account_open",
+    "account_view",
+    "card_issue",
+    "pin_reset",
+    "fine_accept",
+    "loan_process",
+    "account_freeze"
+  ],
+  "card": [
+    "card_view",
+    "card_lock",
+    "card_unlock",
+    "card_report_stolen",
+    "card_status"
+  ],
+  "fines_loans": [
+    "fine_list",
+    "fine_pay",
+    "loan_view"
+  ],
+  "vault_security": [
+    "vault_arm",
+    "vault_breach_start",
+    "vault_breach_tick",
+    "vault_opened",
+    "vault_lockdown",
+    "vault_reset",
+    "vault_cash_collect",
+    "incident_created",
+    "incident_acknowledged",
+    "incident_dispatched",
+    "incident_unit_arrived",
+    "incident_resolved"
+  ]
+}

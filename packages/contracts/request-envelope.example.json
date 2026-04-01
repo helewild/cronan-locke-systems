@@ -1,0 +1,12 @@
+{
+  "tenant_id": "demo-tenant",
+  "region_id": "demo-region",
+  "branch_id": "main-branch",
+  "object_id": "atm-001",
+  "object_type": "atm",
+  "actor_avatar_id": "00000000-0000-0000-0000-000000000000",
+  "actor_name": "Xander Evergarden",
+  "session_id": "sess_000001",
+  "action": "balance_view",
+  "payload": {}
+}

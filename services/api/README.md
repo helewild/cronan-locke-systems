@@ -14,3 +14,18 @@ This service will eventually own:
 - police/security dispatch events
 
 Start from the contract in `docs/api_contract.md`.
+
+Current scaffold:
+
+- `package.json`
+- `.env.example`
+- `src/server.js`
+- `src/routes/`
+- `src/data/mockData.js`
+
+Current mock endpoints:
+
+- `GET /health`
+- `GET /api/v1/tenant`
+- `GET /api/v1/accounts`
+- `GET /api/v1/incidents`

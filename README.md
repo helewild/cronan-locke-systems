@@ -49,6 +49,7 @@ Current source files:
 
 - `docs/architecture.md`
 - `docs/api_contract.md`
+- `docs/event_schema.md`
 - `docs/workflow.md`
 - `docs/atm_test_checklist.md`
 
@@ -73,7 +74,7 @@ Current example tenant:
 ## Suggested Next Milestones
 
 1. Normalize mock IDs and receipt formatting across all objects
-2. Define a shared mock event/incident schema
-3. Scaffold the backend service
-4. Scaffold the admin panel
+2. Wire vault and security terminal to a shared incident model
+3. Expand the API scaffold into real persistence and auth
+4. Expand the admin scaffold into tenant and incident management pages
 5. Connect objects to live API endpoints when hosting is ready

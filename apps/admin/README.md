@@ -14,3 +14,11 @@ This app will eventually handle:
 - staff permissions
 
 Design against `docs/architecture.md` and `docs/api_contract.md`.
+
+Current scaffold:
+
+- `package.json`
+- `server.js`
+- `index.html`
+
+This is only a placeholder shell for the future admin surface.

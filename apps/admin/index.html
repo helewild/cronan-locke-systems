@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Cronan & Locke Systems Admin</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f4efe6;
+        --panel: #fffaf2;
+        --ink: #1d1b17;
+        --muted: #6f6658;
+        --accent: #23443c;
+        --line: #d8cfbf;
+      }
+      body {
+        margin: 0;
+        font-family: Georgia, "Times New Roman", serif;
+        background: linear-gradient(180deg, #efe7d8, var(--bg));
+        color: var(--ink);
+      }
+      main {
+        max-width: 1000px;
+        margin: 0 auto;
+        padding: 32px 20px 48px;
+      }
+      h1, h2 {
+        margin: 0 0 12px;
+      }
+      p {
+        color: var(--muted);
+      }
+      .hero, .grid article {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 20px;
+        box-shadow: 0 10px 30px rgba(35, 68, 60, 0.08);
+      }
+      .hero {
+        margin-bottom: 20px;
+      }
+      .badge {
+        display: inline-block;
+        margin-bottom: 12px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        background: #e0ebe8;
+        color: var(--accent);
+        font-size: 12px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      .grid {
+        display: grid;
+        gap: 16px;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      }
+      ul {
+        margin: 12px 0 0;
+        padding-left: 18px;
+      }
+      code {
+        font-family: Consolas, monospace;
+        background: #efe8da;
+        padding: 2px 6px;
+        border-radius: 6px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <div class="badge">Admin Scaffold</div>
+        <h1>Cronan & Locke Systems</h1>
+        <p>
+          Starter admin surface for tenants, accounts, incidents, and operations.
+          This is a lightweight placeholder aligned to the current API and event contracts.
+        </p>
+      </section>
+
+      <section class="grid">
+        <article>
+          <h2>Tenants</h2>
+          <p>Manage communities, regions, branches, and feature flags.</p>
+        </article>
+        <article>
+          <h2>Accounts</h2>
+          <p>Review balances, card status, fines, loans, and customer records.</p>
+        </article>
+        <article>
+          <h2>Incidents</h2>
+          <p>Track vault breaches, dispatch updates, marked cash flags, and resolution.</p>
+        </article>
+        <article>
+          <h2>Operations</h2>
+          <p>Use <code>docs/api_contract.md</code> and <code>docs/event_schema.md</code> as build guides.</p>
+        </article>
+      </section>
+    </main>
+  </body>
+</html>

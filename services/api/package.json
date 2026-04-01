@@ -1,0 +1,11 @@
+{
+  "name": "@cronan-locke/api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Cronan & Locke Systems API scaffold",
+  "type": "module",
+  "scripts": {
+    "dev": "node src/server.js",
+    "start": "node src/server.js"
+  }
+}

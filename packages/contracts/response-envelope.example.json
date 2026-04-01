@@ -1,0 +1,13 @@
+{
+  "ok": true,
+  "action": "balance_view",
+  "message": "Balance retrieved",
+  "display": {
+    "title": "Balance Inquiry",
+    "lines": [
+      "Available Balance: L$2845"
+    ]
+  },
+  "data": {},
+  "audit_id": "WPB-AUD-30001"
+}
