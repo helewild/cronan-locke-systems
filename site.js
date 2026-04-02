@@ -418,9 +418,6 @@ function wireAuth() {
     document.getElementById("login-password").value = "";
   });
 
-  document.getElementById("tenant-help-btn").addEventListener("click", () => {
-    setAuthMessage("Temporary live plan: buyer rezzes setup box, box registers tenant in Apps Script, website uses activation code to finish owner setup.");
-  });
 }
 
 function wireAdminActions() {
@@ -517,9 +514,6 @@ async function boot() {
   wireAuth();
   wireNavigation();
   wireAdminActions();
-  setClock("auth-clock-line");
-  setInterval(() => setClock("auth-clock-line"), 1000);
-
   const session = loadSession();
   if (session) {
     applySession(session);

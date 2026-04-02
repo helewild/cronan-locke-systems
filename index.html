@@ -10,126 +10,48 @@
     <div class="machine">
       <div class="machine-inner">
         <section id="auth-shell" class="auth-shell">
-          <aside class="auth-sidebar">
-            <section class="bank-crest panel">
-              <div class="shield">WP</div>
-              <div class="bank-subtitle">WHISPERING</div>
-              <div class="bank-title">PINES BANK</div>
-            </section>
-
-            <section class="tenant-card panel">
-              <div class="side-label">Product Owner Flow</div>
-              <div class="tenant-name">Cronan &amp; Locke Systems</div>
-              <div class="tenant-bank">Marketplace To Admin Bootstrap</div>
-              <button id="tenant-help-btn" type="button" class="control-button">How Activation Works</button>
-            </section>
-
-            <section class="auth-note panel">
-              This temporary live stack is designed for:
-              <ul>
-                <li>GitHub Pages frontend</li>
-                <li>Google Sheets data storage</li>
-                <li>Google Apps Script auth and tenant bootstrap</li>
-                <li>first-owner activation after in-world setup box registration</li>
-              </ul>
-            </section>
-
-            <section class="status-card panel">
-              <div class="side-label">Live Mode</div>
-              <div id="bridge-mode" class="status-highlight">DEMO FALLBACK</div>
-              <div class="status-copy">AUTH REQUIRED FOR ADMIN ACCESS</div>
-            </section>
-          </aside>
-
           <main class="auth-main">
-            <section class="header panel">
-              <div class="header-title">CRONAN &amp; LOCKE SYSTEMS</div>
-              <div class="header-status">
-                <div><strong>OWNER ACCESS GATEWAY</strong></div>
-                <div>PRODUCT: RP BANKING PLATFORM</div>
-                <div id="auth-clock-line">DATE: --/--/---- TIME: --:--</div>
+            <section class="forms-panel panel">
+              <div class="tab-row">
+                <button id="login-tab" class="tab-button active" type="button">Owner Login</button>
+                <button id="setup-tab" class="tab-button" type="button">First-Time Setup</button>
               </div>
-            </section>
 
-            <div class="section-bar">Website Login Required</div>
+              <section id="login-card" class="login-card">
+                <div class="form-title">Secure Login</div>
+                <p class="form-copy">Tenant owners and authorized admins must sign in before the terminal is revealed.</p>
+                <form id="login-form" class="form-block">
+                  <label>Username<input id="login-username" name="username" autocomplete="username" required></label>
+                  <label>Password<input id="login-password" name="password" type="password" autocomplete="current-password" required></label>
+                  <button type="submit" class="submit-button">Login To Admin Terminal</button>
+                </form>
 
-            <section class="auth-stage">
-              <section class="hero-panel panel">
-                <div class="eyebrow">Temporary Live Website</div>
-                <h1>Owner Login First. Admin Terminal Second.</h1>
-                <p>
-                  Buyers should not land directly on the control panel. They should land here, log in with their
-                  owner credentials, or complete first-time setup using the activation code issued after the in-world
-                  setup box registers the tenant.
-                </p>
-
-                <div class="auth-badges">
-                  <div class="badge-card">
-                    <div class="side-label">Step 1</div>
-                    <strong>Purchase</strong>
-                    <div>Buyer receives the in-world product.</div>
-                  </div>
-                  <div class="badge-card">
-                    <div class="side-label">Step 2</div>
-                    <strong>Register</strong>
-                    <div>Setup box links avatar to the backend or sheet bridge.</div>
-                  </div>
-                  <div class="badge-card">
-                    <div class="side-label">Step 3</div>
-                    <strong>Activate</strong>
-                    <div>Owner sets permanent login and enters the admin panel.</div>
-                  </div>
-                </div>
-
-                <div class="live-stack">
-                  <div class="stack-line"><strong>Frontend</strong><span>GitHub Pages site and login screen</span></div>
-                  <div class="stack-line"><strong>Bridge</strong><span>Google Apps Script for activation, login, and dashboard payloads</span></div>
-                  <div class="stack-line"><strong>Store</strong><span>Google Sheets for tenants, users, incidents, accounts, cards, and audit logs</span></div>
+                <div class="helper-grid">
+                  <div class="helper-card"><strong>Demo Login</strong><div>Use <span class="accent">admin</span> / <span class="accent">demo123</span> until Apps Script is wired.</div></div>
+                  <div class="helper-card"><strong>Live Owner Flow</strong><div>Marketplace buyer completes in-world setup, then logs in here with issued credentials.</div></div>
                 </div>
               </section>
 
-              <section class="forms-panel panel">
-                <div class="tab-row">
-                  <button id="login-tab" class="tab-button active" type="button">Owner Login</button>
-                  <button id="setup-tab" class="tab-button" type="button">First-Time Setup</button>
-                </div>
+              <section id="setup-card" class="setup-card hidden">
+                <div class="form-title">First-Time Owner Setup</div>
+                <p class="form-copy">Use the activation code or temporary credential created after the setup box registers the buyer.</p>
+                <form id="setup-form" class="form-block">
+                  <label>Activation Code<input id="setup-code" name="activation_code" required></label>
+                  <label>Buyer Avatar Name<input id="setup-avatar" name="avatar_name" required></label>
+                  <label>Create Username<input id="setup-username" name="username" autocomplete="username" required></label>
+                  <label>Create Password<input id="setup-password" name="password" type="password" autocomplete="new-password" required></label>
+                  <button type="submit" class="submit-button">Activate Owner Account</button>
+                </form>
 
-                <section id="login-card" class="login-card">
-                  <div class="form-title">Secure Login</div>
-                  <p class="form-copy">Tenant owners and authorized admins must sign in before the terminal is revealed.</p>
-                  <form id="login-form" class="form-block">
-                    <label>Username<input id="login-username" name="username" autocomplete="username" required></label>
-                    <label>Password<input id="login-password" name="password" type="password" autocomplete="current-password" required></label>
-                    <button type="submit" class="submit-button">Login To Admin Terminal</button>
-                  </form>
-
-                  <div class="helper-grid">
-                    <div class="helper-card"><strong>Demo Login</strong><div>Use <span class="accent">admin</span> / <span class="accent">demo123</span> until Apps Script is wired.</div></div>
-                    <div class="helper-card"><strong>Live Owner Flow</strong><div>Marketplace buyer completes in-world setup, then logs in here with issued credentials.</div></div>
-                  </div>
-                </section>
-
-                <section id="setup-card" class="setup-card hidden">
-                  <div class="form-title">First-Time Owner Setup</div>
-                  <p class="form-copy">Use the activation code or temporary credential created after the setup box registers the buyer.</p>
-                  <form id="setup-form" class="form-block">
-                    <label>Activation Code<input id="setup-code" name="activation_code" required></label>
-                    <label>Buyer Avatar Name<input id="setup-avatar" name="avatar_name" required></label>
-                    <label>Create Username<input id="setup-username" name="username" autocomplete="username" required></label>
-                    <label>Create Password<input id="setup-password" name="password" type="password" autocomplete="new-password" required></label>
-                    <button type="submit" class="submit-button">Activate Owner Account</button>
-                  </form>
-
-                  <div class="helper-grid">
-                    <div class="helper-card"><strong>Demo Activation</strong><div>Use code <span class="accent">DEMO-OWNER-001</span> to simulate the owner bootstrap flow.</div></div>
-                    <div class="helper-card"><strong>Future Live Flow</strong><div>The setup box requests activation from Apps Script and the website finalizes the owner account.</div></div>
-                  </div>
-                </section>
-
-                <div id="auth-message" class="message-box">
-                  Waiting for owner login or first-time activation.
+                <div class="helper-grid">
+                  <div class="helper-card"><strong>Demo Activation</strong><div>Use code <span class="accent">DEMO-OWNER-001</span> to simulate the owner bootstrap flow.</div></div>
+                  <div class="helper-card"><strong>Future Live Flow</strong><div>The setup box requests activation from Apps Script and the website finalizes the owner account.</div></div>
                 </div>
               </section>
+
+              <div id="auth-message" class="message-box">
+                Waiting for owner login or first-time activation.
+              </div>
             </section>
           </main>
         </section>
