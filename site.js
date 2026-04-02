@@ -76,7 +76,11 @@ function setAuthMessage(message, tone) {
 }
 
 function setBridgeMode(label) {
-  document.getElementById("bridge-mode").textContent = label;
+  const node = document.getElementById("bridge-mode");
+  if (!node) {
+    return;
+  }
+  node.textContent = label;
 }
 
 function cloneStore(store) {
