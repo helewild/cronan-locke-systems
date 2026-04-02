@@ -31,6 +31,18 @@
       "session_token": "",
       "session_expires_at": "",
       "must_reset_password": false
+    },
+    {
+      "user_id": "USR-10000",
+      "tenant_id": "platform-root",
+      "username": "platformadmin",
+      "password_hash": "d3ad9315b7be5dd53b31a273b3b3aba5defe700808305aa16a3062b76658a791",
+      "role": "platform_admin",
+      "avatar_name": "Cronan & Locke Operator",
+      "status": "ACTIVE",
+      "session_token": "",
+      "session_expires_at": "",
+      "must_reset_password": false
     }
   ],
   "regions": [

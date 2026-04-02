@@ -26,6 +26,7 @@ const state = {
 };
 
 const VIEW_PERMISSIONS = {
+  platform: "view_platform",
   "bank-core": "view_bank_core",
   accounts: "view_accounts",
   staff: "view_staff",
@@ -154,6 +155,18 @@ function buildAtmNetwork(store) {
 }
 
 function renderTenant() {
+  const tenantLabel = document.querySelector(".tenant-card .side-label");
+  if (state.session?.role === "platform_admin") {
+    if (tenantLabel) {
+      tenantLabel.textContent = "Platform Scope";
+    }
+    document.getElementById("tenant-name").textContent = "CRONAN & LOCKE";
+    document.getElementById("tenant-bank").textContent = "PLATFORM CONTROL";
+    return;
+  }
+  if (tenantLabel) {
+    tenantLabel.textContent = "Current Tenant";
+  }
   const tenant = safeArray(state.store.tenants)[0];
   document.getElementById("tenant-name").textContent = tenant ? tenant.name.toUpperCase() : "NO TENANT";
   document.getElementById("tenant-bank").textContent = tenant ? tenant.bank_name.toUpperCase() : "NO BANK";
@@ -317,6 +330,9 @@ function renderDetailPanel() {
 }
 
 function getCurrentTenant() {
+  if (state.session?.role === "platform_admin") {
+    return null;
+  }
   return safeArray(state.store?.tenants)[0] || null;
 }
 
@@ -343,7 +359,35 @@ function renderTable(view) {
   let columns = [];
   let rows = [];
 
-  if (view === "bank-core") {
+  if (view === "platform") {
+    title.textContent = "Platform";
+    columns = ["Tenant ID", "Tenant", "Bank", "Owner", "Status", "Actions"];
+    rows = safeArray(store.tenants)
+      .filter((tenant) => matchesSearch([
+        tenant.tenant_id,
+        tenant.name,
+        tenant.bank_name,
+        tenant.status,
+        tenant.primary_region_name || "",
+        tenant.owner_username || "",
+        tenant.activation_code || ""
+      ]))
+      .map((tenant) => [
+        tenant.tenant_id,
+        tenant.name,
+        tenant.bank_name,
+        tenant.owner_username ? tenant.owner_username : ("Activation: " + (tenant.activation_code || "PENDING")),
+        { chip: tenant.status, tone: tenant.status === "ACTIVE" ? "" : "alert" },
+        {
+          actions: [
+            { label: "Edit", kind: "edit-tenant", tenantId: tenant.tenant_id, permission: "manage_tenant" },
+            tenant.status === "ACTIVE"
+              ? { label: "Suspend", kind: "suspend-tenant", tenantId: tenant.tenant_id, tone: "danger", permission: "suspend_tenant" }
+              : { label: "Activate", kind: "activate-tenant", tenantId: tenant.tenant_id, permission: "activate_tenant" }
+          ]
+        }
+      ]);
+  } else if (view === "bank-core") {
     title.textContent = "Bank Core";
     columns = ["Module", "Scope", "Health", "Note"];
     rows = [
@@ -517,7 +561,7 @@ function renderTable(view) {
     }
     if (cell && typeof cell === "object" && "actions" in cell) {
       return `<td><div class="row-actions">${cell.actions.length ? cell.actions.map((action) =>
-        `<button class="row-action ${action.tone || ""}" type="button" ${action.permission && !hasPermission(action.permission) ? "disabled" : ""} data-row-action="${action.kind}" data-account-id="${action.accountId || ""}" data-card-id="${action.cardId || ""}" data-fine-id="${action.fineId || ""}" data-loan-id="${action.loanId || ""}" data-user-id="${action.userId || ""}">${action.label}</button>`
+        `<button class="row-action ${action.tone || ""}" type="button" ${action.permission && !hasPermission(action.permission) ? "disabled" : ""} data-row-action="${action.kind}" data-account-id="${action.accountId || ""}" data-card-id="${action.cardId || ""}" data-fine-id="${action.fineId || ""}" data-loan-id="${action.loanId || ""}" data-user-id="${action.userId || ""}" data-tenant-id="${action.tenantId || ""}">${action.label}</button>`
       ).join("") : '<span class="dim-copy">No actions</span>'}</div></td>`;
     }
     return `<td>${cell}</td>`;
@@ -539,9 +583,12 @@ function setActiveView(view) {
     link.classList.toggle("hidden", !canAccessView(link.dataset.view));
   });
   const actionButton = document.getElementById("view-action-btn");
-  actionButton.classList.toggle("hidden", !(view === "payroll" || view === "accounts"));
-  actionButton.textContent = view === "accounts" ? "New Account" : "Run Payroll";
-  actionButton.disabled = view === "accounts" ? !hasPermission("create_customer_account") : (view === "payroll" ? !hasPermission("run_payroll") : false);
+  actionButton.classList.toggle("hidden", !(view === "platform" || view === "payroll" || view === "accounts"));
+  actionButton.textContent = view === "platform" ? "New Tenant" : (view === "accounts" ? "New Account" : "Run Payroll");
+  actionButton.disabled =
+    view === "platform"
+      ? !hasPermission("create_tenant")
+      : (view === "accounts" ? !hasPermission("create_customer_account") : (view === "payroll" ? !hasPermission("run_payroll") : false));
   renderTable(view);
   savePreviewState();
 }
@@ -558,6 +605,7 @@ function applySession(session) {
   saveSession(session);
   document.getElementById("auth-shell").classList.add("hidden");
   document.getElementById("admin-shell").classList.remove("hidden");
+  document.getElementById("manage-tenant-btn").textContent = session.role === "platform_admin" ? "New Tenant" : "Manage Tenant";
   document.getElementById("admin-username").textContent = session.username.toUpperCase();
   document.getElementById("admin-role").textContent = (session.role || "tenant_owner").toUpperCase().replaceAll("_", " ");
   document.getElementById("header-user-line").textContent = "USERNAME: " + session.username.toUpperCase();
@@ -566,7 +614,9 @@ function applySession(session) {
     link.classList.toggle("hidden", !canAccessView(link.dataset.view));
   });
   if (!canAccessView(state.view)) {
-    const fallback = Object.keys(VIEW_PERMISSIONS).find((view) => canAccessView(view)) || "accounts";
+    const fallback = session.role === "platform_admin"
+      ? "platform"
+      : (Object.keys(VIEW_PERMISSIONS).find((view) => canAccessView(view)) || "accounts");
     state.view = fallback;
   }
   applyStore(state.store);
@@ -826,6 +876,68 @@ async function runStaffAction(kind, userId) {
   addLog(result.message || `${kind} applied to ${userId}.`);
 }
 
+async function runTenantAction(kind, tenantId) {
+  if (!tenantId) {
+    addLog("Missing tenant id for platform action.");
+    return;
+  }
+
+  if (kind === "edit-tenant") {
+    const tenant = safeArray(state.store?.tenants).find((item) => item.tenant_id === tenantId);
+    if (!tenant) {
+      addLog("Target tenant was not found.");
+      return;
+    }
+    const tenantName = window.prompt("Tenant display name:", tenant.name || "");
+    if (tenantName === null) {
+      return;
+    }
+    const bankName = window.prompt("Bank display name:", tenant.bank_name || "");
+    if (bankName === null) {
+      return;
+    }
+    const regionName = window.prompt("Primary region name:", tenant.primary_region_name || "");
+    if (regionName === null) {
+      return;
+    }
+    const payrollRaw = window.prompt("Default payroll amount:", String(tenant.payroll_default_amount ?? 250));
+    if (payrollRaw === null) {
+      return;
+    }
+
+    const result = await runAdminAction("update_tenant_settings", {
+      target_tenant_id: tenantId,
+      tenant_name: tenantName.trim(),
+      bank_name: bankName.trim(),
+      primary_region_name: regionName.trim(),
+      payroll_default_amount: Number(payrollRaw)
+    });
+    if (!result.ok) {
+      addLog(result.error || "Tenant update failed.");
+      return;
+    }
+    applyStore(result.store);
+    addLog(result.message || (`Updated tenant ${tenantId}.`));
+    return;
+  }
+
+  const mapping = {
+    "suspend-tenant": "suspend_tenant",
+    "activate-tenant": "activate_tenant"
+  };
+
+  const result = await runAdminAction(mapping[kind], {
+    target_tenant_id: tenantId
+  });
+  if (!result.ok) {
+    addLog(result.error || `${kind} failed.`);
+    return;
+  }
+
+  applyStore(result.store);
+  addLog(result.message || `${kind} applied to ${tenantId}.`);
+}
+
 function demoRequest(action, payload) {
   if (action === "login") {
     const setupUser = state.setupUsers[payload.username];
@@ -977,6 +1089,10 @@ function wireAdminActions() {
       await runStaffAction(kind, button.dataset.userId);
       return;
     }
+    if (["edit-tenant", "suspend-tenant", "activate-tenant"].includes(kind)) {
+      await runTenantAction(kind, button.dataset.tenantId);
+      return;
+    }
     if (["lock-card", "unlock-card", "report-stolen-card"].includes(kind)) {
       await runCardAction(kind, button.dataset.cardId);
       return;
@@ -1048,6 +1164,36 @@ function wireAdminActions() {
   });
 
   document.getElementById("manage-tenant-btn").addEventListener("click", async () => {
+    if (state.session?.role === "platform_admin") {
+      const tenantName = window.prompt("New tenant display name:", "");
+      if (!tenantName || !tenantName.trim()) {
+        addLog("Platform tenant creation canceled.");
+        return;
+      }
+      const bankName = window.prompt("New bank display name:", tenantName.trim() + " Bank");
+      if (!bankName || !bankName.trim()) {
+        addLog("Platform tenant creation canceled.");
+        return;
+      }
+      const ownerAvatar = window.prompt("Owner avatar or operator name:", "");
+      if (ownerAvatar === null) {
+        addLog("Platform tenant creation canceled.");
+        return;
+      }
+      const result = await runAdminAction("create_tenant", {
+        tenant_name: tenantName.trim(),
+        bank_name: bankName.trim(),
+        owner_avatar_name: String(ownerAvatar || "").trim()
+      });
+      if (!result.ok) {
+        addLog(result.error || "Platform tenant creation failed.");
+        return;
+      }
+      applyStore(result.store);
+      addLog(result.message || `Created tenant ${tenantName.trim()}.`);
+      return;
+    }
+
     const username = window.prompt("Create staff username, or leave blank to edit tenant settings:", "");
     if (username && username.trim()) {
       const avatarName = window.prompt("Staff avatar or display name:", username.trim());
@@ -1108,6 +1254,35 @@ function wireAdminActions() {
   });
 
   document.getElementById("view-action-btn").addEventListener("click", async () => {
+    if (state.view === "platform") {
+      const tenantName = window.prompt("New tenant display name:", "");
+      if (!tenantName || !tenantName.trim()) {
+        return;
+      }
+      const bankName = window.prompt("New bank display name:", tenantName.trim() + " Bank");
+      if (!bankName || !bankName.trim()) {
+        addLog("Platform tenant creation canceled.");
+        return;
+      }
+      const ownerAvatar = window.prompt("Owner avatar or operator name:", "");
+      if (ownerAvatar === null) {
+        addLog("Platform tenant creation canceled.");
+        return;
+      }
+
+      const result = await runAdminAction("create_tenant", {
+        tenant_name: tenantName.trim(),
+        bank_name: bankName.trim(),
+        owner_avatar_name: String(ownerAvatar || "").trim()
+      });
+      if (!result.ok) {
+        addLog(result.error || "Tenant creation failed.");
+        return;
+      }
+      applyStore(result.store);
+      addLog(result.message || `Created tenant ${tenantName.trim()}.`);
+      return;
+    }
     if (state.view === "accounts") {
       await runAccountAction("create-account");
       return;

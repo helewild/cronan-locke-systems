@@ -24,6 +24,43 @@ function ensureUsers(store) {
 }
 
 const ROLE_PERMISSIONS = {
+  platform_admin: [
+    "view_platform",
+    "view_bank_core",
+    "view_accounts",
+    "view_staff",
+    "view_cards",
+    "view_transactions",
+    "view_fines",
+    "view_loans",
+    "view_vault_control",
+    "view_incidents",
+    "view_payroll",
+    "view_atm_network",
+    "view_audit_logs",
+    "manage_tenant",
+    "create_tenant",
+    "suspend_tenant",
+    "activate_tenant",
+    "create_staff_user",
+    "disable_staff_user",
+    "enable_staff_user",
+    "reset_staff_session",
+    "create_customer_account",
+    "deposit_account",
+    "withdraw_account",
+    "freeze_account",
+    "unfreeze_account",
+    "lock_card",
+    "unlock_card",
+    "report_stolen_card",
+    "pay_fine",
+    "pay_loan",
+    "run_payroll",
+    "dispatch_police",
+    "lock_vault",
+    "shutdown_atm_network"
+  ],
   tenant_owner: [
     "view_bank_core",
     "view_accounts",
@@ -116,6 +153,33 @@ function getTenantAccountIds(store, tenantId) {
 }
 
 function buildTenantStore(store, tenantId) {
+  if (tenantId === "platform-root") {
+    return {
+      scope_mode: "platform",
+      tenants: (store.tenants || []).map((item) => ({ ...item })),
+      users: (store.users || []).map((item) => ({
+        user_id: item.user_id,
+        tenant_id: item.tenant_id,
+        username: item.username,
+        role: item.role,
+        avatar_name: item.avatar_name,
+        status: item.status,
+        must_reset_password: item.must_reset_password
+      })),
+      players: (store.players || []).map((item) => ({ ...item })),
+      accounts: (store.accounts || []).map((item) => ({ ...item })),
+      cards: (store.cards || []).map((item) => ({ ...item })),
+      fines: (store.fines || []).map((item) => ({ ...item })),
+      loans: (store.loans || []).map((item) => ({ ...item })),
+      transactions: (store.transactions || []).map((item) => ({ ...item })),
+      audit_logs: (store.audit_logs || []).map((item) => ({ ...item })),
+      vault_incidents: (store.vault_incidents || []).map((item) => ({ ...item })),
+      branches: (store.branches || []).map((item) => ({ ...item })),
+      regions: (store.regions || []).map((item) => ({ ...item })),
+      atms: (store.atms || []).map((item) => ({ ...item }))
+    };
+  }
+
   const accountIds = new Set(getTenantAccountIds(store, tenantId));
   const accounts = (store.accounts || []).filter((item) => item.tenant_id === tenantId);
   const users = (store.users || [])
@@ -225,6 +289,14 @@ function nextId(prefix, values) {
     .filter((value) => Number.isFinite(value));
   const next = (numeric.length ? Math.max(...numeric) : 10000) + 1;
   return prefix + String(next);
+}
+
+function nextTenantId(store) {
+  const numeric = (store.tenants || [])
+    .map((item) => Number(String(item.tenant_id || "").replace("tenant-", "")))
+    .filter((value) => Number.isFinite(value));
+  const next = (numeric.length ? Math.max(...numeric) : 1000) + 1;
+  return "tenant-" + String(next);
 }
 
 function appendPortalAudit(store, actorName, tenantId, objectType, objectId, targetAccountId, action, amount, memo) {
@@ -444,7 +516,8 @@ function runPayroll(store, tenantId, actorName, amountInput) {
 }
 
 function updateTenantSettings(store, tenantId, actorName, payload) {
-  const tenant = findTenant(store, tenantId);
+  const targetTenantId = String(payload.target_tenant_id || tenantId);
+  const tenant = findTenant(store, targetTenantId);
   if (!tenant) {
     throw new Error("Tenant not found.");
   }
@@ -466,23 +539,98 @@ function updateTenantSettings(store, tenantId, actorName, payload) {
   tenant.primary_region_name = nextRegionName;
   tenant.payroll_default_amount = nextPayroll;
 
-  const regions = (store.regions || []).filter((item) => item.tenant_id === tenantId);
+  const regions = (store.regions || []).filter((item) => item.tenant_id === targetTenantId);
   if (regions.length && nextRegionName) {
     regions[0].name = nextRegionName;
   }
 
-  const branches = (store.branches || []).filter((item) => item.tenant_id === tenantId);
+  const branches = (store.branches || []).filter((item) => item.tenant_id === targetTenantId);
   if (branches.length) {
     branches[0].name = nextBankName + " Main Branch";
   }
 
   (store.atms || []).forEach((atm) => {
-    if (atm.tenant_id === tenantId) {
+    if (atm.tenant_id === targetTenantId) {
       atm.scope = nextTenantName;
     }
   });
 
-  appendPortalAudit(store, actorName, tenantId, "tenant", tenantId, null, "tenant_settings_update", nextPayroll, "Tenant settings updated");
+  appendPortalAudit(store, actorName, targetTenantId, "tenant", targetTenantId, null, "tenant_settings_update", nextPayroll, "Tenant settings updated");
+}
+
+function createTenant(store, actorName, payload) {
+  const tenantName = String(payload.tenant_name || "").trim();
+  const bankName = String(payload.bank_name || "").trim();
+  const regionName = String(payload.primary_region_name || "").trim();
+  const payrollDefault = Number(payload.payroll_default_amount || 250);
+
+  if (!tenantName || !bankName) {
+    throw new Error("Tenant and bank name are required.");
+  }
+  if (!Number.isFinite(payrollDefault) || payrollDefault <= 0) {
+    throw new Error("Payroll default must be greater than zero.");
+  }
+
+  const tenantId = nextTenantId(store);
+  const regionId = tenantId + "-region";
+  const branchId = tenantId + "-branch";
+  const activationCode = "ACT-" + String(tenantId).replace("tenant-", "").padStart(6, "0");
+
+  store.tenants.push({
+    tenant_id: tenantId,
+    name: tenantName,
+    bank_name: bankName,
+    status: "ACTIVE",
+    owner_avatar_name: "",
+    owner_username: "",
+    activation_code: activationCode,
+    created_at: new Date().toISOString(),
+    payroll_default_amount: payrollDefault,
+    primary_region_name: regionName || tenantName,
+    feature_flags: [
+      "base_banking",
+      "justice_and_fines",
+      "loans_and_credit",
+      "crime_and_security"
+    ]
+  });
+
+  if (!Array.isArray(store.regions)) {
+    store.regions = [];
+  }
+  if (!Array.isArray(store.branches)) {
+    store.branches = [];
+  }
+  if (!Array.isArray(store.atms)) {
+    store.atms = [];
+  }
+
+  store.regions.push({
+    region_id: regionId,
+    tenant_id: tenantId,
+    name: regionName || tenantName,
+    status: "ACTIVE"
+  });
+
+  store.branches.push({
+    branch_id: branchId,
+    tenant_id: tenantId,
+    region_id: regionId,
+    name: bankName + " Main Branch",
+    status: "ACTIVE"
+  });
+
+  appendPortalAudit(store, actorName, tenantId, "tenant", tenantId, null, "tenant_create", payrollDefault, "Tenant created from platform console");
+}
+
+function updateTenantStatus(store, actorName, targetTenantId, nextStatus) {
+  const tenant = findTenant(store, targetTenantId);
+  if (!tenant) {
+    throw new Error("Tenant not found.");
+  }
+
+  tenant.status = nextStatus;
+  appendPortalAudit(store, actorName, targetTenantId, "tenant", targetTenantId, null, nextStatus === "ACTIVE" ? "tenant_activate" : "tenant_suspend", 0, "Tenant status set to " + nextStatus);
 }
 
 function updateCardState(store, tenantId, actorName, cardId, nextState, action, memo) {
@@ -743,6 +891,18 @@ async function adminAction(store, payload) {
     case "manage_tenant":
       requirePermission(user, "manage_tenant");
       appendPortalAudit(store, actorName, user.tenant_id, "website", "tenant-console", null, "tenant_manage_open", 0, "Tenant management opened");
+      break;
+    case "create_tenant":
+      requirePermission(user, "create_tenant");
+      createTenant(store, actorName, payload);
+      break;
+    case "suspend_tenant":
+      requirePermission(user, "suspend_tenant");
+      updateTenantStatus(store, actorName, payload.target_tenant_id, "SUSPENDED");
+      break;
+    case "activate_tenant":
+      requirePermission(user, "activate_tenant");
+      updateTenantStatus(store, actorName, payload.target_tenant_id, "ACTIVE");
       break;
     case "update_tenant_settings":
       requirePermission(user, "manage_tenant");
