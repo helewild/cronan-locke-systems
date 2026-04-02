@@ -155,7 +155,7 @@ function updateSystemStatus() {
   const incidentActive = state.incident && state.incident.state === "ACTIVE";
   document.getElementById("status-line-1").textContent = "ATM NETWORK: " + (atmOffline ? "DEGRADED" : "ONLINE");
   document.getElementById("status-line-2").textContent = "DISPATCH: " + (incidentActive ? "ENGAGED" : "MONITORING");
-  document.getElementById("status-line-3").textContent = "MODE: " + (CONFIG.apiUrl ? "APPS SCRIPT BRIDGE" : "STATIC PREVIEW");
+  document.getElementById("status-line-3").textContent = "MODE: " + (CONFIG.siteMode === "vps" ? "VPS API" : (CONFIG.apiUrl ? "APPS SCRIPT BRIDGE" : "STATIC PREVIEW"));
 }
 
 function renderIncident() {
@@ -245,6 +245,22 @@ function renderTable(view) {
         ]
       }
     ]);
+  } else if (view === "cards") {
+    title.textContent = "Cards";
+    columns = ["Card ID", "Account", "State", "Actions"];
+    rows = safeArray(store.cards).map((card) => [
+      card.card_id,
+      card.account_id,
+      { chip: card.state, tone: card.state === "ACTIVE" ? "" : "alert" },
+      {
+        actions: [
+          card.state === "ACTIVE"
+            ? { label: "Lock", kind: "lock-card", cardId: card.card_id, tone: "danger" }
+            : { label: "Unlock", kind: "unlock-card", cardId: card.card_id },
+          { label: "Report Stolen", kind: "report-stolen-card", cardId: card.card_id, tone: "danger" }
+        ]
+      }
+    ]);
   } else if (view === "transactions") {
     title.textContent = "Transactions";
     columns = ["Type", "Account", "Amount", "Direction"];
@@ -278,6 +294,34 @@ function renderTable(view) {
     rows = getTransactions(store)
       .filter((txn) => txn.type === "PAYROLL")
       .map((txn) => [txn.type, txn.account_id, { money: txn.amount }, txn.memo]);
+  } else if (view === "fines") {
+    title.textContent = "Fines";
+    columns = ["Fine ID", "Account", "Amount", "Status", "Actions"];
+    rows = safeArray(store.fines).map((fine) => [
+      fine.fine_id,
+      fine.account_id,
+      { money: fine.amount },
+      { chip: fine.status, tone: fine.status === "DUE" ? "alert" : "" },
+      {
+        actions: fine.status === "DUE"
+          ? [{ label: "Pay Fine", kind: "pay-fine", fineId: fine.fine_id }]
+          : []
+      }
+    ]);
+  } else if (view === "loans") {
+    title.textContent = "Loans";
+    columns = ["Loan ID", "Account", "Balance", "Status", "Actions"];
+    rows = safeArray(store.loans).map((loan) => [
+      loan.loan_id,
+      loan.account_id,
+      { money: loan.balance },
+      { chip: loan.status, tone: loan.status === "ACTIVE" ? "" : "dim" },
+      {
+        actions: loan.status === "ACTIVE"
+          ? [{ label: "Pay Loan", kind: "pay-loan", loanId: loan.loan_id }]
+          : []
+      }
+    ]);
   } else if (view === "atm-network") {
     title.textContent = "ATM Network";
     columns = ["ATM ID", "Branch", "Status", "Scope"];
@@ -307,9 +351,9 @@ function renderTable(view) {
       return `<td><span class="chip ${cell.tone || ""}">${cell.chip}</span></td>`;
     }
     if (cell && typeof cell === "object" && "actions" in cell) {
-      return `<td><div class="row-actions">${cell.actions.map((action) =>
-        `<button class="row-action ${action.tone || ""}" type="button" data-row-action="${action.kind}" data-account-id="${action.accountId}">${action.label}</button>`
-      ).join("")}</div></td>`;
+      return `<td><div class="row-actions">${cell.actions.length ? cell.actions.map((action) =>
+        `<button class="row-action ${action.tone || ""}" type="button" data-row-action="${action.kind}" data-account-id="${action.accountId || ""}" data-card-id="${action.cardId || ""}" data-fine-id="${action.fineId || ""}" data-loan-id="${action.loanId || ""}">${action.label}</button>`
+      ).join("") : '<span class="dim-copy">No actions</span>'}</div></td>`;
     }
     return `<td>${cell}</td>`;
   }).join("") + "</tr>").join("");
@@ -445,6 +489,73 @@ async function runAccountAction(kind, accountId) {
   }
 }
 
+async function runCardAction(kind, cardId) {
+  if (!cardId) {
+    addLog("Missing card id for action.");
+    return;
+  }
+
+  const mapping = {
+    "lock-card": "lock_card",
+    "unlock-card": "unlock_card",
+    "report-stolen-card": "report_stolen_card"
+  };
+
+  const result = await runAdminAction(mapping[kind], { card_id: cardId });
+  if (!result.ok) {
+    addLog(result.error || `${kind} failed.`);
+    return;
+  }
+
+  applyStore(result.store);
+  addLog(result.message || `${kind} applied to ${cardId}.`);
+}
+
+async function runFineAction(fineId) {
+  if (!fineId) {
+    addLog("Missing fine id for action.");
+    return;
+  }
+
+  const result = await runAdminAction("pay_fine", { fine_id: fineId });
+  if (!result.ok) {
+    addLog(result.error || "Fine payment failed.");
+    return;
+  }
+
+  applyStore(result.store);
+  addLog(result.message || `Fine paid for ${fineId}.`);
+}
+
+async function runLoanAction(loanId) {
+  if (!loanId) {
+    addLog("Missing loan id for action.");
+    return;
+  }
+
+  const raw = window.prompt("Enter loan payment amount in Linden dollars:", "75");
+  if (raw === null) {
+    return;
+  }
+  const amount = Number(raw);
+  if (!amount || amount < 1) {
+    addLog("Loan payment amount must be greater than zero.");
+    return;
+  }
+
+  const result = await runAdminAction("pay_loan", {
+    loan_id: loanId,
+    amount
+  });
+  if (!result.ok) {
+    addLog(result.error || "Loan payment failed.");
+    return;
+  }
+
+  applyStore(result.store);
+  addLog(result.message || `Loan payment applied to ${loanId}.`);
+}
+
 function demoRequest(action, payload) {
   if (action === "login") {
     const setupUser = state.setupUsers[payload.username];
@@ -577,7 +688,22 @@ function wireAdminActions() {
     if (!button) {
       return;
     }
-    await runAccountAction(button.dataset.rowAction, button.dataset.accountId);
+    const kind = button.dataset.rowAction;
+    if (["deposit", "withdraw", "freeze", "unfreeze"].includes(kind)) {
+      await runAccountAction(kind, button.dataset.accountId);
+      return;
+    }
+    if (["lock-card", "unlock-card", "report-stolen-card"].includes(kind)) {
+      await runCardAction(kind, button.dataset.cardId);
+      return;
+    }
+    if (kind === "pay-fine") {
+      await runFineAction(button.dataset.fineId);
+      return;
+    }
+    if (kind === "pay-loan") {
+      await runLoanAction(button.dataset.loanId);
+    }
   });
 
   document.getElementById("dispatch-btn").addEventListener("click", async () => {

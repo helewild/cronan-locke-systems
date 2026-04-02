@@ -85,6 +85,21 @@ function findIncident(store, tenantId, incidentId) {
   return (store.vault_incidents || []).find((incident) => incident.tenant_id === tenantId && incident.incident_id === incidentId) || null;
 }
 
+function findCard(store, tenantId, cardId) {
+  const accountIds = new Set(getTenantAccountIds(store, tenantId));
+  return (store.cards || []).find((card) => accountIds.has(card.account_id) && card.card_id === cardId) || null;
+}
+
+function findFine(store, tenantId, fineId) {
+  const accountIds = new Set(getTenantAccountIds(store, tenantId));
+  return (store.fines || []).find((fine) => accountIds.has(fine.account_id) && fine.fine_id === fineId) || null;
+}
+
+function findLoan(store, tenantId, loanId) {
+  const accountIds = new Set(getTenantAccountIds(store, tenantId));
+  return (store.loans || []).find((loan) => accountIds.has(loan.account_id) && loan.loan_id === loanId) || null;
+}
+
 function appendPortalAudit(store, actorName, tenantId, objectType, objectId, targetAccountId, action, amount, memo) {
   createAuditEntry(store, {
     tenant_id: tenantId,
@@ -290,6 +305,88 @@ function runPayroll(store, tenantId, actorName, amountInput) {
   });
 }
 
+function updateCardState(store, tenantId, actorName, cardId, nextState, action, memo) {
+  const card = findCard(store, tenantId, cardId);
+  if (!card) {
+    throw new Error("Card not found.");
+  }
+
+  card.state = nextState;
+  appendPortalAudit(store, actorName, tenantId, "card", card.card_id, card.account_id, action, 0, memo);
+}
+
+function payFine(store, tenantId, actorName, fineId) {
+  const fine = findFine(store, tenantId, fineId);
+  if (!fine) {
+    throw new Error("Fine not found.");
+  }
+  if (String(fine.status || "").toUpperCase() !== "DUE") {
+    throw new Error("Fine is not due.");
+  }
+
+  const account = findAccount(store, tenantId, fine.account_id);
+  if (!account) {
+    throw new Error("Linked account not found for fine.");
+  }
+  if (Number(account.balance || 0) < Number(fine.amount || 0)) {
+    throw new Error("Insufficient funds to pay fine.");
+  }
+
+  account.balance = Number(account.balance || 0) - Number(fine.amount || 0);
+  account.outstanding_fine = Math.max(0, Number(account.outstanding_fine || 0) - Number(fine.amount || 0));
+  fine.status = "PAID";
+
+  createTransaction(store, {
+    account_id: account.account_id,
+    type: "FINE_PAYMENT",
+    amount: Number(fine.amount || 0),
+    direction: "OUT",
+    memo: "Fine " + fine.reference + " paid via VPS admin"
+  });
+
+  appendPortalAudit(store, actorName, tenantId, "fine", fine.fine_id, account.account_id, "fine_pay", Number(fine.amount || 0), "Fine paid from admin terminal");
+}
+
+function payLoan(store, tenantId, actorName, loanId, amountInput) {
+  const loan = findLoan(store, tenantId, loanId);
+  if (!loan) {
+    throw new Error("Loan not found.");
+  }
+  if (String(loan.status || "").toUpperCase() !== "ACTIVE") {
+    throw new Error("Loan is not active.");
+  }
+
+  const amount = Number(amountInput || 0);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new Error("Loan payment amount must be greater than zero.");
+  }
+
+  const account = findAccount(store, tenantId, loan.account_id);
+  if (!account) {
+    throw new Error("Linked account not found for loan.");
+  }
+  if (Number(account.balance || 0) < amount) {
+    throw new Error("Insufficient funds to pay loan.");
+  }
+
+  account.balance = Number(account.balance || 0) - amount;
+  loan.balance = Math.max(0, Number(loan.balance || 0) - amount);
+  account.loan_balance = Math.max(0, Number(account.loan_balance || 0) - amount);
+  if (loan.balance === 0) {
+    loan.status = "PAID";
+  }
+
+  createTransaction(store, {
+    account_id: account.account_id,
+    type: "LOAN_PAYMENT",
+    amount,
+    direction: "OUT",
+    memo: "Loan payment via VPS admin"
+  });
+
+  appendPortalAudit(store, actorName, tenantId, "loan", loan.loan_id, account.account_id, "loan_pay", amount, "Loan payment from admin terminal");
+}
+
 function adminAction(store, payload) {
   const user = requireSession(store, payload);
   const actorName = payload.actor_name || user.username;
@@ -321,6 +418,21 @@ function adminAction(store, payload) {
       break;
     case "unfreeze_account":
       updateAccountStatus(store, user.tenant_id, actorName, payload.account_id, "ACTIVE");
+      break;
+    case "lock_card":
+      updateCardState(store, user.tenant_id, actorName, payload.card_id, "LOCKED", "card_lock", "Card locked from admin terminal");
+      break;
+    case "unlock_card":
+      updateCardState(store, user.tenant_id, actorName, payload.card_id, "ACTIVE", "card_unlock", "Card unlocked from admin terminal");
+      break;
+    case "report_stolen_card":
+      updateCardState(store, user.tenant_id, actorName, payload.card_id, "STOLEN", "card_report_stolen", "Card reported stolen from admin terminal");
+      break;
+    case "pay_fine":
+      payFine(store, user.tenant_id, actorName, payload.fine_id);
+      break;
+    case "pay_loan":
+      payLoan(store, user.tenant_id, actorName, payload.loan_id, payload.amount);
       break;
     default:
       return { ok: false, error: "Unsupported admin action." };
