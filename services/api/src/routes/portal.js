@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { config } from "../config.js";
 import { getStore, writeStore } from "../data/store.js";
 import { createAuditEntry } from "../lib/audit.js";
 import { readBody } from "../lib/readBody.js";
@@ -661,6 +662,14 @@ function createTenant(store, actorName, payload) {
 }
 
 async function registerTenantBox(store, payload) {
+  if (config.setupBoxSecret && String(payload.setup_secret || "").trim() !== String(config.setupBoxSecret).trim()) {
+    throw new Error("Invalid setup box secret.");
+  }
+
+  if (!String(payload.buyer_avatar_name || "").trim()) {
+    throw new Error("Buyer avatar name is required.");
+  }
+
   const actorName = String(payload.buyer_avatar_name || "Marketplace Buyer").trim() || "Marketplace Buyer";
   const created = createTenant(store, actorName, {
     tenant_name: payload.tenant_name || payload.buyer_avatar_name || "New Tenant",
@@ -680,6 +689,7 @@ async function registerTenantBox(store, payload) {
     tenant_id: created.tenantId,
     activation_code: created.activationCode,
     license_id: created.licenseId,
+    admin_url: config.adminBaseUrl || "",
     message: "Tenant registered from setup box."
   };
 }

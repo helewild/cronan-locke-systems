@@ -10,6 +10,7 @@ Current objects:
 - `scripts/hud/hud_mock.lsl`
 - `scripts/vault/vault_mock.lsl`
 - `scripts/security/security_terminal_mock.lsl`
+- `scripts/setup/setup_box.lsl`
 
 Shared templates:
 
