@@ -292,6 +292,22 @@ function findTenant(store, tenantId) {
   return (store.tenants || []).find((item) => item.tenant_id === tenantId) || null;
 }
 
+function findLicenseBySetupBox(store, setupBoxKey) {
+  return (store.licenses || []).find((item) => String(item.setup_box_key || "") === String(setupBoxKey || "")) || null;
+}
+
+function buildRegistrationResponse(store, tenantId, licenseId) {
+  const tenant = findTenant(store, tenantId);
+  return {
+    ok: true,
+    tenant_id: tenantId,
+    activation_code: tenant?.activation_code || "",
+    license_id: licenseId || "",
+    admin_url: config.adminBaseUrl || "",
+    message: "Tenant registered from setup box."
+  };
+}
+
 function nextId(prefix, values) {
   const numeric = values
     .map((value) => Number(String(value || "").replace(prefix, "")))
@@ -627,6 +643,7 @@ function createTenant(store, actorName, payload) {
     status: licenseStatus,
     buyer_avatar_name: String(payload.owner_avatar_name || "").trim(),
     buyer_avatar_key: String(payload.buyer_avatar_key || "").trim(),
+    setup_box_key: String(payload.setup_box_key || "").trim(),
     marketplace_order_id: String(payload.marketplace_order_id || "").trim(),
     issued_at: new Date().toISOString(),
     source: String(payload.license_source || "platform_console").trim()
@@ -670,6 +687,15 @@ async function registerTenantBox(store, payload) {
     throw new Error("Buyer avatar name is required.");
   }
 
+  ensureLicenses(store);
+
+  if (String(payload.setup_box_key || "").trim()) {
+    const existingLicense = findLicenseBySetupBox(store, payload.setup_box_key);
+    if (existingLicense) {
+      return buildRegistrationResponse(store, existingLicense.tenant_id, existingLicense.license_id);
+    }
+  }
+
   const actorName = String(payload.buyer_avatar_name || "Marketplace Buyer").trim() || "Marketplace Buyer";
   const created = createTenant(store, actorName, {
     tenant_name: payload.tenant_name || payload.buyer_avatar_name || "New Tenant",
@@ -678,20 +704,14 @@ async function registerTenantBox(store, payload) {
     payroll_default_amount: Number(payload.payroll_default_amount || 250),
     owner_avatar_name: payload.buyer_avatar_name || "",
     buyer_avatar_key: payload.buyer_avatar_key || "",
+    setup_box_key: payload.setup_box_key || "",
     marketplace_order_id: payload.marketplace_order_id || "",
     license_status: "ACTIVE",
     license_source: "setup_box"
   });
 
   await writeStore(store);
-  return {
-    ok: true,
-    tenant_id: created.tenantId,
-    activation_code: created.activationCode,
-    license_id: created.licenseId,
-    admin_url: config.adminBaseUrl || "",
-    message: "Tenant registered from setup box."
-  };
+  return buildRegistrationResponse(store, created.tenantId, created.licenseId);
 }
 
 function updateTenantStatus(store, actorName, targetTenantId, nextStatus) {

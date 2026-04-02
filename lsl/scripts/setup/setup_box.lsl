@@ -7,6 +7,10 @@ integer CONFIG_PAYROLL_DEFAULT = 250;
 
 key gPendingRequest = NULL_KEY;
 key gRequestUser = NULL_KEY;
+string gRegisteredTenantId = "";
+string gRegisteredActivationCode = "";
+string gRegisteredLicenseId = "";
+string gRegisteredAdminUrl = "";
 
 string headerLine()
 {
@@ -48,12 +52,28 @@ string jsonPayload(key avatar)
         "payroll_default_amount", CONFIG_PAYROLL_DEFAULT,
         "buyer_avatar_name", buyer,
         "buyer_avatar_key", (string)avatar,
+        "setup_box_key", (string)llGetKey(),
         "marketplace_order_id", ""
     ]);
 }
 
 integer beginRegistration(key avatar)
 {
+    if (gRegisteredTenantId != "")
+    {
+        llRegionSayTo(
+            avatar,
+            0,
+            headerLine() + "\n"
+            + "This setup box is already registered.\n"
+            + "Tenant ID: " + gRegisteredTenantId + "\n"
+            + "Activation Code: " + gRegisteredActivationCode + "\n"
+            + "License ID: " + gRegisteredLicenseId + "\n"
+            + "Admin URL: " + gRegisteredAdminUrl
+        );
+        return 0;
+    }
+
     if (gPendingRequest != NULL_KEY)
     {
         llRegionSayTo(avatar, 0, headerLine() + " Setup request already in progress.");
@@ -132,7 +152,7 @@ default
         }
 
         okValue = llJsonGetValue(body, ["ok"]);
-        if (okValue != "true")
+        if (okValue != JSON_TRUE && okValue != "true")
         {
             message = llJsonGetValue(body, ["error"]);
             if (message == JSON_INVALID || message == "")
@@ -150,6 +170,10 @@ default
         licenseId = llJsonGetValue(body, ["license_id"]);
         adminUrl = llJsonGetValue(body, ["admin_url"]);
         message = llJsonGetValue(body, ["message"]);
+        gRegisteredTenantId = tenantId;
+        gRegisteredActivationCode = activationCode;
+        gRegisteredLicenseId = licenseId;
+        gRegisteredAdminUrl = adminUrl;
 
         llRegionSayTo(
             gRequestUser,

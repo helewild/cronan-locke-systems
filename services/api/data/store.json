@@ -52,6 +52,7 @@
       "status": "ACTIVE",
       "buyer_avatar_name": "Whispering Pines Owner",
       "buyer_avatar_key": "",
+      "setup_box_key": "",
       "marketplace_order_id": "DEMO-ORDER-001",
       "issued_at": "2026-04-02T00:00:00Z",
       "source": "marketplace_demo"

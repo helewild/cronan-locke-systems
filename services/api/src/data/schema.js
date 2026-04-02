@@ -52,6 +52,7 @@ export const STORE_TABLES = [
       "status",
       "buyer_avatar_name",
       "buyer_avatar_key",
+      "setup_box_key",
       "marketplace_order_id",
       "issued_at",
       "source"
@@ -59,6 +60,7 @@ export const STORE_TABLES = [
     defaults: {
       buyer_avatar_name: "",
       buyer_avatar_key: "",
+      setup_box_key: "",
       marketplace_order_id: "",
       issued_at: "",
       source: "manual"
@@ -216,6 +218,7 @@ export const CREATE_TABLE_STATEMENTS = [
     status TEXT NOT NULL,
     buyer_avatar_name TEXT,
     buyer_avatar_key TEXT,
+    setup_box_key TEXT,
     marketplace_order_id TEXT,
     issued_at TIMESTAMPTZ,
     source TEXT
@@ -314,5 +317,6 @@ export const CREATE_TABLE_STATEMENTS = [
     scope TEXT
   )`,
   `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS payroll_default_amount NUMERIC(18,2) NOT NULL DEFAULT 250`,
-  `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS primary_region_name TEXT`
+  `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS primary_region_name TEXT`,
+  `ALTER TABLE licenses ADD COLUMN IF NOT EXISTS setup_box_key TEXT`
 ];
