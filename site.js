@@ -25,6 +25,21 @@ const state = {
   selectedAccountId: null
 };
 
+const STAFF_ROLE_HELP = {
+  bank_admin: {
+    title: "Bank Admin",
+    copy: "Can manage accounts, cards, fines, loans, payroll, and employment records."
+  },
+  teller: {
+    title: "Teller",
+    copy: "Can help customers with accounts, cards, fines, and loan payments, but cannot run payroll or security actions."
+  },
+  security_admin: {
+    title: "Security Admin",
+    copy: "Can work incidents, vault response, and ATM network controls, but not customer banking actions."
+  }
+};
+
 const VIEW_PERMISSIONS = {
   platform: "view_platform",
   "bank-core": "view_bank_core",
@@ -98,6 +113,32 @@ function setAuthMessage(message, tone) {
   const box = document.getElementById("auth-message");
   box.textContent = message;
   box.classList.toggle("alert", tone === "alert");
+}
+
+function updateStaffRoleHint() {
+  const role = document.getElementById("staff-role")?.value || "bank_admin";
+  const hint = STAFF_ROLE_HELP[role] || STAFF_ROLE_HELP.bank_admin;
+  const node = document.getElementById("staff-role-hint");
+  if (!node) {
+    return;
+  }
+  node.innerHTML = `<strong>${hint.title}</strong><div>${hint.copy}</div>`;
+}
+
+function openStaffModal() {
+  document.getElementById("staff-form").reset();
+  document.getElementById("staff-created").classList.add("hidden");
+  document.getElementById("staff-created-copy").textContent = "";
+  document.getElementById("staff-modal").classList.remove("hidden");
+  document.getElementById("staff-modal").setAttribute("aria-hidden", "false");
+  document.getElementById("staff-role").value = "bank_admin";
+  updateStaffRoleHint();
+  document.getElementById("staff-username").focus();
+}
+
+function closeStaffModal() {
+  document.getElementById("staff-modal").classList.add("hidden");
+  document.getElementById("staff-modal").setAttribute("aria-hidden", "true");
 }
 
 function setBridgeMode(label) {
@@ -769,12 +810,12 @@ function setActiveView(view) {
     link.classList.toggle("hidden", !canAccessView(link.dataset.view));
   });
   const actionButton = document.getElementById("view-action-btn");
-  actionButton.classList.toggle("hidden", !(view === "platform" || view === "payroll" || view === "accounts" || view === "employment"));
-  actionButton.textContent = view === "platform" ? "New Tenant" : (view === "accounts" ? "New Account" : (view === "employment" ? "New Job" : "Run Payroll"));
+  actionButton.classList.toggle("hidden", !(view === "platform" || view === "payroll" || view === "accounts" || view === "employment" || view === "staff"));
+  actionButton.textContent = view === "platform" ? "New Tenant" : (view === "accounts" ? "New Account" : (view === "employment" ? "New Job" : (view === "staff" ? "New Staff" : "Run Payroll")));
   actionButton.disabled =
     view === "platform"
       ? !hasPermission("create_tenant")
-      : (view === "accounts" ? !hasPermission("create_customer_account") : (view === "employment" ? !hasPermission("create_employment") : (view === "payroll" ? !hasPermission("run_payroll") : false)));
+      : (view === "accounts" ? !hasPermission("create_customer_account") : (view === "employment" ? !hasPermission("create_employment") : (view === "staff" ? !hasPermission("create_staff_user") : (view === "payroll" ? !hasPermission("run_payroll") : false))));
   renderTable(view);
   savePreviewState();
 }
@@ -1060,6 +1101,40 @@ async function runStaffAction(kind, userId) {
 
   applyStore(result.store);
   addLog(result.message || `${kind} applied to ${userId}.`);
+}
+
+async function submitStaffCreate(event) {
+  event.preventDefault();
+  const username = document.getElementById("staff-username").value.trim();
+  const avatarName = document.getElementById("staff-avatar").value.trim();
+  const role = document.getElementById("staff-role").value.trim();
+  const password = document.getElementById("staff-password").value;
+
+  if (!username || !avatarName || !role || !password) {
+    addLog("Staff creation requires all fields.");
+    return;
+  }
+
+  const result = await runAdminAction("create_staff_user", {
+    new_username: username,
+    new_avatar_name: avatarName,
+    new_role: role,
+    new_password: password
+  });
+  if (!result.ok) {
+    addLog(result.error || "Staff creation failed.");
+    return;
+  }
+
+  applyStore(result.store);
+  document.getElementById("staff-created-copy").innerHTML = `
+    <div>Username: <span class="accent">${username}</span></div>
+    <div>Temporary Password: <span class="accent">${password}</span></div>
+    <div>Role: <span class="accent">${prettyRole(role)}</span></div>
+    <div>Tell the staff member to log in and change this password immediately.</div>
+  `;
+  document.getElementById("staff-created").classList.remove("hidden");
+  addLog(result.message || `Staff user ${username} created.`);
 }
 
 async function runEmploymentAction(kind, employmentId) {
@@ -1554,31 +1629,6 @@ function wireAdminActions() {
       return;
     }
 
-    const username = window.prompt("Create staff username, or leave blank to edit tenant settings:", "");
-    if (username && username.trim()) {
-      const avatarName = window.prompt("Staff avatar or display name:", username.trim());
-      const role = window.prompt("Staff role (bank_admin, teller, security_admin):", "bank_admin");
-      const password = window.prompt("Temporary password for this staff user:", "changeme123");
-      if (!avatarName || !role || !password) {
-        addLog("Staff creation canceled.");
-        return;
-      }
-
-      const result = await runAdminAction("create_staff_user", {
-        new_username: username.trim(),
-        new_avatar_name: avatarName.trim(),
-        new_role: role.trim(),
-        new_password: password
-      });
-      if (!result.ok) {
-        addLog(result.error || "Staff creation failed.");
-        return;
-      }
-      applyStore(result.store);
-      addLog(result.message || `Staff user ${username.trim()} created.`);
-      return;
-    }
-
     const tenant = getCurrentTenant();
     const tenantName = window.prompt("Tenant display name:", tenant?.name || "");
     if (tenantName === null) {
@@ -1651,6 +1701,10 @@ function wireAdminActions() {
       await runEmploymentAction("create-employment");
       return;
     }
+    if (state.view === "staff") {
+      openStaffModal();
+      return;
+    }
     if (state.view !== "payroll") {
       return;
     }
@@ -1664,6 +1718,12 @@ function wireAdminActions() {
   });
 
   document.getElementById("logout-btn").addEventListener("click", logout);
+  document.getElementById("staff-role").addEventListener("change", updateStaffRoleHint);
+  document.getElementById("staff-form").addEventListener("submit", submitStaffCreate);
+  document.getElementById("staff-cancel").addEventListener("click", closeStaffModal);
+  document.querySelectorAll("[data-close-modal=\"staff\"]").forEach((node) => {
+    node.addEventListener("click", closeStaffModal);
+  });
 }
 
 function seedLogs(store) {

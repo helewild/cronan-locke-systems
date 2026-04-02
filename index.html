@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Cronan &amp; Locke Systems</title>
-    <link rel="stylesheet" href="./site.css?v=20260402o">
+    <link rel="stylesheet" href="./site.css?v=20260402p">
   </head>
   <body>
     <div class="machine">
@@ -173,10 +173,39 @@
             </section>
           </main>
         </section>
+
+        <section id="staff-modal" class="modal-shell hidden" aria-hidden="true">
+          <div class="modal-backdrop" data-close-modal="staff"></div>
+          <div class="modal-card panel">
+            <div class="terminal-title modal-title">Create Staff User</div>
+            <form id="staff-form" class="form-block">
+              <label>Username<input id="staff-username" name="username" autocomplete="off" required></label>
+              <label>Avatar Or Display Name<input id="staff-avatar" name="avatar_name" autocomplete="off" required></label>
+              <label>
+                Role
+                <select id="staff-role" name="role">
+                  <option value="bank_admin">Bank Admin</option>
+                  <option value="teller">Teller</option>
+                  <option value="security_admin">Security Admin</option>
+                </select>
+              </label>
+              <div id="staff-role-hint" class="helper-card compact-helper"></div>
+              <label>Temporary Password<input id="staff-password" name="password" autocomplete="new-password" required></label>
+              <div class="modal-actions">
+                <button type="button" id="staff-cancel" class="ghost-button">Cancel</button>
+                <button type="submit" class="submit-button">Create Staff Account</button>
+              </div>
+            </form>
+            <div id="staff-created" class="helper-card hidden">
+              <strong>Staff Account Created</strong>
+              <div id="staff-created-copy"></div>
+            </div>
+          </div>
+        </section>
       </div>
     </div>
 
-    <script src="./site-config.js?v=20260402o"></script>
-    <script src="./site.js?v=20260402o"></script>
+    <script src="./site-config.js?v=20260402p"></script>
+    <script src="./site.js?v=20260402p"></script>
   </body>
 </html>
