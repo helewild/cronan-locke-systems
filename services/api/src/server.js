@@ -1,5 +1,6 @@
 import http from "node:http";
 import { config } from "./config.js";
+import { initPostgres } from "./data/postgresStore.js";
 import { handleAccounts } from "./routes/accounts.js";
 import { handleActionRequest } from "./routes/actions.js";
 import { handleAuditLogs } from "./routes/auditLogs.js";
@@ -71,6 +72,17 @@ const server = http.createServer(async (req, res) => {
   });
 });
 
-server.listen(config.port, () => {
-  console.log(`${config.apiName} listening on port ${config.port}`);
+async function start() {
+  if (config.storageBackend === "postgres" && config.databaseUrl) {
+    await initPostgres(config.databaseUrl);
+  }
+
+  server.listen(config.port, () => {
+    console.log(`${config.apiName} listening on port ${config.port}`);
+  });
+}
+
+start().catch((error) => {
+  console.error("Failed to start API", error);
+  process.exit(1);
 });
