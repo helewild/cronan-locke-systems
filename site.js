@@ -19,7 +19,23 @@ const state = {
   view: "accounts",
   atmNetwork: [],
   session: null,
-  setupUsers: {}
+  setupUsers: {},
+  passwordResetPromptedToken: null
+};
+
+const VIEW_PERMISSIONS = {
+  "bank-core": "view_bank_core",
+  accounts: "view_accounts",
+  staff: "view_staff",
+  cards: "view_cards",
+  transactions: "view_transactions",
+  fines: "view_fines",
+  loans: "view_loans",
+  "vault-control": "view_vault_control",
+  incidents: "view_incidents",
+  payroll: "view_payroll",
+  "atm-network": "view_atm_network",
+  "audit-logs": "view_audit_logs"
 };
 
 function safeArray(value) {
@@ -71,6 +87,7 @@ function loadSession() {
 
 function clearSession() {
   localStorage.removeItem(CONFIG.sessionKey);
+  state.passwordResetPromptedToken = null;
 }
 
 function setAuthMessage(message, tone) {
@@ -156,12 +173,39 @@ function prettyRole(value) {
     .toUpperCase();
 }
 
+function getPermissions() {
+  return Array.isArray(state.session?.permissions) ? state.session.permissions : [];
+}
+
+function hasPermission(permission) {
+  return getPermissions().includes(permission);
+}
+
+function canAccessView(view) {
+  const permission = VIEW_PERMISSIONS[view];
+  return !permission || hasPermission(permission);
+}
+
 function updateSystemStatus() {
   const atmOffline = state.atmNetwork.filter((atm) => atm.status !== "ONLINE").length;
   const incidentActive = state.incident && state.incident.state === "ACTIVE";
   document.getElementById("status-line-1").textContent = "ATM NETWORK: " + (atmOffline ? "DEGRADED" : "ONLINE");
   document.getElementById("status-line-2").textContent = "DISPATCH: " + (incidentActive ? "ENGAGED" : "MONITORING");
   document.getElementById("status-line-3").textContent = "MODE: " + (CONFIG.siteMode === "vps" ? "VPS API" : (CONFIG.apiUrl ? "APPS SCRIPT BRIDGE" : "STATIC PREVIEW"));
+}
+
+function syncControlStates() {
+  const dispatchButton = document.getElementById("dispatch-btn");
+  const lockButton = document.getElementById("lock-btn");
+  const shutdownButton = document.getElementById("shutdown-btn");
+  const manageButton = document.getElementById("manage-tenant-btn");
+  const payrollButton = document.getElementById("view-action-btn");
+
+  dispatchButton.disabled = dispatchButton.disabled || !hasPermission("dispatch_police");
+  lockButton.disabled = lockButton.disabled || !hasPermission("lock_vault");
+  shutdownButton.disabled = !hasPermission("shutdown_atm_network");
+  manageButton.disabled = !hasPermission("manage_tenant");
+  payrollButton.disabled = state.view === "payroll" ? !hasPermission("run_payroll") : false;
 }
 
 function renderIncident() {
@@ -243,11 +287,11 @@ function renderTable(view) {
       { chip: account.status, tone: account.status === "ACTIVE" ? "" : "dim" },
       {
         actions: [
-          { label: "Deposit", kind: "deposit", accountId: account.account_id },
-          { label: "Withdraw", kind: "withdraw", accountId: account.account_id },
+          { label: "Deposit", kind: "deposit", accountId: account.account_id, permission: "deposit_account" },
+          { label: "Withdraw", kind: "withdraw", accountId: account.account_id, permission: "withdraw_account" },
           account.status === "ACTIVE"
-            ? { label: "Freeze", kind: "freeze", accountId: account.account_id, tone: "danger" }
-            : { label: "Unfreeze", kind: "unfreeze", accountId: account.account_id }
+            ? { label: "Freeze", kind: "freeze", accountId: account.account_id, tone: "danger", permission: "freeze_account" }
+            : { label: "Unfreeze", kind: "unfreeze", accountId: account.account_id, permission: "unfreeze_account" }
         ]
       }
     ]);
@@ -261,10 +305,10 @@ function renderTable(view) {
       { chip: staffUser.status, tone: staffUser.status === "ACTIVE" ? "" : "alert" },
       {
         actions: [
-          { label: "Reset Session", kind: "reset-staff-session", userId: staffUser.user_id },
+          { label: "Reset Session", kind: "reset-staff-session", userId: staffUser.user_id, permission: "reset_staff_session" },
           staffUser.status === "ACTIVE"
-            ? { label: "Disable", kind: "disable-staff", userId: staffUser.user_id, tone: "danger" }
-            : { label: "Enable", kind: "enable-staff", userId: staffUser.user_id }
+            ? { label: "Disable", kind: "disable-staff", userId: staffUser.user_id, tone: "danger", permission: "disable_staff_user" }
+            : { label: "Enable", kind: "enable-staff", userId: staffUser.user_id, permission: "enable_staff_user" }
         ]
       }
     ]);
@@ -278,9 +322,9 @@ function renderTable(view) {
       {
         actions: [
           card.state === "ACTIVE"
-            ? { label: "Lock", kind: "lock-card", cardId: card.card_id, tone: "danger" }
-            : { label: "Unlock", kind: "unlock-card", cardId: card.card_id },
-          { label: "Report Stolen", kind: "report-stolen-card", cardId: card.card_id, tone: "danger" }
+            ? { label: "Lock", kind: "lock-card", cardId: card.card_id, tone: "danger", permission: "lock_card" }
+            : { label: "Unlock", kind: "unlock-card", cardId: card.card_id, permission: "unlock_card" },
+          { label: "Report Stolen", kind: "report-stolen-card", cardId: card.card_id, tone: "danger", permission: "report_stolen_card" }
         ]
       }
     ]);
@@ -327,7 +371,7 @@ function renderTable(view) {
       { chip: fine.status, tone: fine.status === "DUE" ? "alert" : "" },
       {
         actions: fine.status === "DUE"
-          ? [{ label: "Pay Fine", kind: "pay-fine", fineId: fine.fine_id }]
+          ? [{ label: "Pay Fine", kind: "pay-fine", fineId: fine.fine_id, permission: "pay_fine" }]
           : []
       }
     ]);
@@ -341,7 +385,7 @@ function renderTable(view) {
       { chip: loan.status, tone: loan.status === "ACTIVE" ? "" : "dim" },
       {
         actions: loan.status === "ACTIVE"
-          ? [{ label: "Pay Loan", kind: "pay-loan", loanId: loan.loan_id }]
+          ? [{ label: "Pay Loan", kind: "pay-loan", loanId: loan.loan_id, permission: "pay_loan" }]
           : []
       }
     ]);
@@ -375,18 +419,24 @@ function renderTable(view) {
     }
     if (cell && typeof cell === "object" && "actions" in cell) {
       return `<td><div class="row-actions">${cell.actions.length ? cell.actions.map((action) =>
-        `<button class="row-action ${action.tone || ""}" type="button" data-row-action="${action.kind}" data-account-id="${action.accountId || ""}" data-card-id="${action.cardId || ""}" data-fine-id="${action.fineId || ""}" data-loan-id="${action.loanId || ""}" data-user-id="${action.userId || ""}">${action.label}</button>`
+        `<button class="row-action ${action.tone || ""}" type="button" ${action.permission && !hasPermission(action.permission) ? "disabled" : ""} data-row-action="${action.kind}" data-account-id="${action.accountId || ""}" data-card-id="${action.cardId || ""}" data-fine-id="${action.fineId || ""}" data-loan-id="${action.loanId || ""}" data-user-id="${action.userId || ""}">${action.label}</button>`
       ).join("") : '<span class="dim-copy">No actions</span>'}</div></td>`;
     }
     return `<td>${cell}</td>`;
   }).join("") + "</tr>").join("");
   foot.textContent = "Showing " + rows.length + " records for " + title.textContent.toUpperCase();
+  syncControlStates();
 }
 
 function setActiveView(view) {
+  if (!canAccessView(view)) {
+    addLog("Access denied for " + view.toUpperCase() + ".");
+    return;
+  }
   state.view = view;
   document.querySelectorAll(".nav-link").forEach((link) => {
     link.classList.toggle("active", link.dataset.view === view);
+    link.classList.toggle("hidden", !canAccessView(link.dataset.view));
   });
   const actionButton = document.getElementById("view-action-btn");
   actionButton.classList.toggle("hidden", view !== "payroll");
@@ -410,7 +460,51 @@ function applySession(session) {
   document.getElementById("admin-role").textContent = (session.role || "tenant_owner").toUpperCase().replaceAll("_", " ");
   document.getElementById("header-user-line").textContent = "USERNAME: " + session.username.toUpperCase();
   setClock("clock-line");
+  document.querySelectorAll(".nav-link").forEach((link) => {
+    link.classList.toggle("hidden", !canAccessView(link.dataset.view));
+  });
+  if (!canAccessView(state.view)) {
+    const fallback = Object.keys(VIEW_PERMISSIONS).find((view) => canAccessView(view)) || "accounts";
+    state.view = fallback;
+  }
   applyStore(state.store);
+  if (session.must_reset_password && state.passwordResetPromptedToken !== session.token) {
+    state.passwordResetPromptedToken = session.token;
+    window.setTimeout(() => enforcePasswordReset(), 150);
+  }
+}
+
+async function enforcePasswordReset() {
+  if (!state.session || !state.session.must_reset_password) {
+    return;
+  }
+
+  const nextPassword = window.prompt("Temporary password detected. Enter a new password (8+ characters):", "");
+  if (nextPassword === null) {
+    addLog("Password reset still required for this account.");
+    return;
+  }
+
+  const result = await bridgeRequest("change_password", {
+    token: state.session.token,
+    tenant_id: state.session.tenant_id,
+    new_password: nextPassword
+  });
+
+  if (!result.ok) {
+    addLog(result.error || "Password reset failed.");
+    state.passwordResetPromptedToken = null;
+    return;
+  }
+
+  if (result.session) {
+    state.session = result.session;
+    saveSession(result.session);
+  }
+  if (result.store) {
+    applyStore(result.store);
+  }
+  addLog(result.message || "Password changed.");
 }
 
 function logout() {
@@ -471,7 +565,7 @@ async function runAccountAction(kind, accountId) {
     return;
   }
 
-  if (kind === "deposit" || kind === "withdraw") {
+    if (kind === "deposit" || kind === "withdraw") {
     const raw = window.prompt(`Enter ${kind} amount in Linden dollars:`, "100");
     if (raw === null) {
       return;
@@ -803,6 +897,10 @@ function wireAdminActions() {
       tenant_id: state.session ? state.session.tenant_id : ""
     });
     if (result.ok && result.store) {
+      if (result.session) {
+        state.session = result.session;
+        saveSession(result.session);
+      }
       applyStore(result.store);
     }
     addLog("Manual refresh executed for " + state.view.toUpperCase());

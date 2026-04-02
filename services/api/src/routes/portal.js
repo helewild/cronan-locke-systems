@@ -23,6 +23,89 @@ function ensureUsers(store) {
   }
 }
 
+const ROLE_PERMISSIONS = {
+  tenant_owner: [
+    "view_bank_core",
+    "view_accounts",
+    "view_staff",
+    "view_cards",
+    "view_transactions",
+    "view_fines",
+    "view_loans",
+    "view_vault_control",
+    "view_incidents",
+    "view_payroll",
+    "view_atm_network",
+    "view_audit_logs",
+    "manage_tenant",
+    "create_staff_user",
+    "disable_staff_user",
+    "enable_staff_user",
+    "reset_staff_session",
+    "deposit_account",
+    "withdraw_account",
+    "freeze_account",
+    "unfreeze_account",
+    "lock_card",
+    "unlock_card",
+    "report_stolen_card",
+    "pay_fine",
+    "pay_loan",
+    "run_payroll",
+    "dispatch_police",
+    "lock_vault",
+    "shutdown_atm_network"
+  ],
+  bank_admin: [
+    "view_bank_core",
+    "view_accounts",
+    "view_cards",
+    "view_transactions",
+    "view_fines",
+    "view_loans",
+    "view_payroll",
+    "view_audit_logs",
+    "deposit_account",
+    "withdraw_account",
+    "freeze_account",
+    "unfreeze_account",
+    "lock_card",
+    "unlock_card",
+    "report_stolen_card",
+    "pay_fine",
+    "pay_loan",
+    "run_payroll"
+  ],
+  teller: [
+    "view_accounts",
+    "view_cards",
+    "view_transactions",
+    "view_fines",
+    "view_loans",
+    "deposit_account",
+    "withdraw_account",
+    "lock_card",
+    "report_stolen_card",
+    "pay_fine",
+    "pay_loan"
+  ],
+  security_admin: [
+    "view_bank_core",
+    "view_vault_control",
+    "view_incidents",
+    "view_atm_network",
+    "view_audit_logs",
+    "dispatch_police",
+    "lock_vault",
+    "shutdown_atm_network"
+  ]
+};
+
+function buildPermissions(role) {
+  const base = ROLE_PERMISSIONS[String(role || "").trim()] || [];
+  return [...new Set(base)];
+}
+
 function getTenantAccountIds(store, tenantId) {
   return (store.accounts || [])
     .filter((account) => account.tenant_id === tenantId)
@@ -95,6 +178,13 @@ function requireOwner(user) {
   }
 }
 
+function requirePermission(user, permission) {
+  const permissions = buildPermissions(user.role);
+  if (!permissions.includes(permission)) {
+    throw new Error("Permission denied.");
+  }
+}
+
 function findAccount(store, tenantId, accountId) {
   return (store.accounts || []).find((account) => account.tenant_id === tenantId && account.account_id === accountId) || null;
 }
@@ -159,7 +249,9 @@ async function login(store, payload) {
       username: user.username,
       role: user.role,
       tenant_id: user.tenant_id,
-      token: user.session_token
+      token: user.session_token,
+      permissions: buildPermissions(user.role),
+      must_reset_password: Boolean(user.must_reset_password)
     },
     store: buildTenantStore(store, user.tenant_id)
   };
@@ -206,6 +298,14 @@ function dashboard(store, payload) {
   const user = requireSession(store, payload);
   return {
     ok: true,
+    session: {
+      username: user.username,
+      role: user.role,
+      tenant_id: user.tenant_id,
+      token: user.session_token,
+      permissions: buildPermissions(user.role),
+      must_reset_password: Boolean(user.must_reset_password)
+    },
     store: buildTenantStore(store, user.tenant_id)
   };
 }
@@ -409,6 +509,34 @@ function payLoan(store, tenantId, actorName, loanId, amountInput) {
   appendPortalAudit(store, actorName, tenantId, "loan", loan.loan_id, account.account_id, "loan_pay", amount, "Loan payment from admin terminal");
 }
 
+async function changePassword(store, payload) {
+  const user = requireSession(store, payload);
+  const newPassword = String(payload.new_password || "");
+
+  if (newPassword.length < 8) {
+    return { ok: false, error: "Password must be at least 8 characters." };
+  }
+
+  user.password_hash = hashPassword(newPassword);
+  user.must_reset_password = false;
+  appendPortalAudit(store, user.username, user.tenant_id, "user", user.user_id, null, "password_change", 0, "Password changed from portal");
+  await writeStore(store);
+
+  return {
+    ok: true,
+    message: "Password updated.",
+    session: {
+      username: user.username,
+      role: user.role,
+      tenant_id: user.tenant_id,
+      token: user.session_token,
+      permissions: buildPermissions(user.role),
+      must_reset_password: false
+    },
+    store: buildTenantStore(store, user.tenant_id)
+  };
+}
+
 function createStaffUser(store, tenantId, actorName, payload) {
   const username = String(payload.new_username || "").trim();
   const avatarName = String(payload.new_avatar_name || "").trim();
@@ -475,61 +603,75 @@ async function adminAction(store, payload) {
 
   switch (payload.action_type) {
     case "dispatch_police":
+      requirePermission(user, "dispatch_police");
       dispatchPolice(store, user.tenant_id, actorName, payload.incident_id);
       break;
     case "lock_vault":
+      requirePermission(user, "lock_vault");
       lockVault(store, user.tenant_id, actorName, payload.incident_id);
       break;
     case "shutdown_atm_network":
+      requirePermission(user, "shutdown_atm_network");
       shutdownAtmNetwork(store, user.tenant_id, actorName);
       break;
     case "run_payroll":
+      requirePermission(user, "run_payroll");
       runPayroll(store, user.tenant_id, actorName, payload.amount);
       break;
     case "manage_tenant":
+      requirePermission(user, "manage_tenant");
       appendPortalAudit(store, actorName, user.tenant_id, "website", "tenant-console", null, "tenant_manage_open", 0, "Tenant management opened");
       break;
     case "create_staff_user":
-      requireOwner(user);
+      requirePermission(user, "create_staff_user");
       createStaffUser(store, user.tenant_id, actorName, payload);
       break;
     case "disable_staff_user":
-      requireOwner(user);
+      requirePermission(user, "disable_staff_user");
       updateStaffStatus(store, user.tenant_id, actorName, payload.user_id, "DISABLED");
       break;
     case "enable_staff_user":
-      requireOwner(user);
+      requirePermission(user, "enable_staff_user");
       updateStaffStatus(store, user.tenant_id, actorName, payload.user_id, "ACTIVE");
       break;
     case "reset_staff_session":
-      requireOwner(user);
+      requirePermission(user, "reset_staff_session");
       resetStaffSession(store, user.tenant_id, actorName, payload.user_id);
       break;
     case "deposit_account":
+      requirePermission(user, "deposit_account");
       updateAccountBalance(store, user.tenant_id, actorName, payload.account_id, Number(payload.amount || 0), "DEPOSIT");
       break;
     case "withdraw_account":
+      requirePermission(user, "withdraw_account");
       updateAccountBalance(store, user.tenant_id, actorName, payload.account_id, Number(payload.amount || 0), "WITHDRAW");
       break;
     case "freeze_account":
+      requirePermission(user, "freeze_account");
       updateAccountStatus(store, user.tenant_id, actorName, payload.account_id, "FROZEN");
       break;
     case "unfreeze_account":
+      requirePermission(user, "unfreeze_account");
       updateAccountStatus(store, user.tenant_id, actorName, payload.account_id, "ACTIVE");
       break;
     case "lock_card":
+      requirePermission(user, "lock_card");
       updateCardState(store, user.tenant_id, actorName, payload.card_id, "LOCKED", "card_lock", "Card locked from admin terminal");
       break;
     case "unlock_card":
+      requirePermission(user, "unlock_card");
       updateCardState(store, user.tenant_id, actorName, payload.card_id, "ACTIVE", "card_unlock", "Card unlocked from admin terminal");
       break;
     case "report_stolen_card":
+      requirePermission(user, "report_stolen_card");
       updateCardState(store, user.tenant_id, actorName, payload.card_id, "STOLEN", "card_report_stolen", "Card reported stolen from admin terminal");
       break;
     case "pay_fine":
+      requirePermission(user, "pay_fine");
       payFine(store, user.tenant_id, actorName, payload.fine_id);
       break;
     case "pay_loan":
+      requirePermission(user, "pay_loan");
       payLoan(store, user.tenant_id, actorName, payload.loan_id, payload.amount);
       break;
     default:
@@ -576,6 +718,12 @@ export async function handlePortal(req, res) {
   } else if (action === "admin_action") {
     try {
       result = await adminAction(store, body);
+    } catch (error) {
+      result = { ok: false, error: error.message };
+    }
+  } else if (action === "change_password") {
+    try {
+      result = await changePassword(store, body);
     } catch (error) {
       result = { ok: false, error: error.message };
     }
