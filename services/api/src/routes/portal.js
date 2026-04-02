@@ -1329,7 +1329,11 @@ export async function handlePortal(req, res) {
   if (action === "health") {
     result = { ok: true, status: "online" };
   } else if (action === "login") {
-    result = await login(store, body);
+    try {
+      result = await login(store, body);
+    } catch (error) {
+      result = { ok: false, error: error.message };
+    }
   } else if (action === "activate_owner") {
     result = await activateOwner(store, body);
   } else if (action === "register_tenant_box") {
