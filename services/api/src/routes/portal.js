@@ -49,6 +49,7 @@ const ROLE_PERMISSIONS = {
     "create_tenant",
     "suspend_tenant",
     "activate_tenant",
+    "reissue_activation_code",
     "create_staff_user",
     "disable_staff_user",
     "enable_staff_user",
@@ -332,6 +333,10 @@ function nextLicenseId(store) {
   return "LIC-" + String(next);
 }
 
+function buildActivationCode(tenantId) {
+  return "ACT-" + String(tenantId).replace("tenant-", "").padStart(6, "0");
+}
+
 function appendPortalAudit(store, actorName, tenantId, objectType, objectId, targetAccountId, action, amount, memo) {
   createAuditEntry(store, {
     tenant_id: tenantId,
@@ -427,6 +432,20 @@ async function activateOwner(store, payload) {
     ok: true,
     message: "Owner account activated."
   };
+}
+
+function reissueActivationCode(store, actorName, targetTenantId) {
+  const tenant = findTenant(store, targetTenantId);
+  if (!tenant) {
+    throw new Error("Tenant not found.");
+  }
+
+  if (String(tenant.owner_username || "").trim()) {
+    throw new Error("Tenant already has an owner account.");
+  }
+
+  tenant.activation_code = buildActivationCode(targetTenantId) + "-" + createToken().slice(0, 6).toUpperCase();
+  appendPortalAudit(store, actorName, targetTenantId, "tenant", targetTenantId, null, "tenant_activation_reissue", 0, "Activation code reissued");
 }
 
 function dashboard(store, payload) {
@@ -1003,6 +1022,10 @@ async function adminAction(store, payload) {
     case "activate_tenant":
       requirePermission(user, "activate_tenant");
       updateTenantStatus(store, actorName, payload.target_tenant_id, "ACTIVE");
+      break;
+    case "reissue_activation_code":
+      requirePermission(user, "reissue_activation_code");
+      reissueActivationCode(store, actorName, payload.target_tenant_id);
       break;
     case "update_tenant_settings":
       requirePermission(user, "manage_tenant");

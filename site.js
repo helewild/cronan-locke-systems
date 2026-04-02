@@ -474,10 +474,13 @@ function renderTable(view) {
         {
           actions: [
             { label: "Edit", kind: "edit-tenant", tenantId: tenant.tenant_id, permission: "manage_tenant" },
+            !tenant.owner_username
+              ? { label: "Reissue Code", kind: "reissue-code", tenantId: tenant.tenant_id, permission: "reissue_activation_code" }
+              : null,
             tenant.status === "ACTIVE"
               ? { label: "Suspend", kind: "suspend-tenant", tenantId: tenant.tenant_id, tone: "danger", permission: "suspend_tenant" }
               : { label: "Activate", kind: "activate-tenant", tenantId: tenant.tenant_id, permission: "activate_tenant" }
-          ]
+          ].filter(Boolean)
         }
       ]);
   } else if (view === "bank-core") {
@@ -1016,7 +1019,8 @@ async function runTenantAction(kind, tenantId) {
 
   const mapping = {
     "suspend-tenant": "suspend_tenant",
-    "activate-tenant": "activate_tenant"
+    "activate-tenant": "activate_tenant",
+    "reissue-code": "reissue_activation_code"
   };
 
   const result = await runAdminAction(mapping[kind], {
