@@ -160,10 +160,24 @@ function updateSystemStatus() {
 
 function renderIncident() {
   const incident = state.incident;
-  document.getElementById("incident-id").textContent = incident ? incident.incident_id : "-";
-  document.getElementById("incident-stage").textContent = incident ? incident.stage : "-";
-  document.getElementById("incident-unit").textContent = incident ? incident.responding_unit : "-";
-  document.getElementById("incident-update").textContent = incident ? incident.last_update.toUpperCase() : "-";
+  const banner = document.getElementById("incident-banner");
+  const stage = document.getElementById("incident-stage");
+  const dispatchButton = document.getElementById("dispatch-btn");
+  const lockButton = document.getElementById("lock-btn");
+  const hasIncident = !!incident && String(incident.state || "").trim().toUpperCase() === "ACTIVE";
+
+  document.getElementById("incident-id").textContent = hasIncident ? incident.incident_id : "-";
+  stage.textContent = hasIncident ? incident.stage : "System Running Normal";
+  document.getElementById("incident-unit").textContent = hasIncident ? incident.responding_unit : "-";
+  document.getElementById("incident-update").textContent = hasIncident ? incident.last_update.toUpperCase() : "No active alerts";
+
+  banner.textContent = hasIncident ? "[!] Vault Incident Detected" : "[OK] System Running Normal";
+  banner.classList.toggle("status-alert", hasIncident);
+  banner.classList.toggle("status-ok", !hasIncident);
+  stage.classList.toggle("hot", hasIncident);
+  stage.classList.toggle("ok", !hasIncident);
+  dispatchButton.disabled = !hasIncident;
+  lockButton.disabled = !hasIncident;
   updateSystemStatus();
 }
 
