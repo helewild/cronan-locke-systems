@@ -81,7 +81,13 @@ function prepareValue(column, value, definition) {
     return Number(value ?? definition.defaults?.[column] ?? 0);
   }
 
-  if (column === "created_at" || column === "session_expires_at") {
+  if (
+    column === "created_at"
+    || column === "session_expires_at"
+    || column === "issued_at"
+    || column === "renewed_at"
+    || column === "expires_at"
+  ) {
     return value || null;
   }
 
