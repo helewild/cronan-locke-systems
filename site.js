@@ -8,6 +8,10 @@ const CONFIG = {
   demoAdminPassword: "demo123"
 };
 
+if (window.CRONAN_LOCKE_CONFIG) {
+  Object.assign(CONFIG, window.CRONAN_LOCKE_CONFIG);
+}
+
 const state = {
   store: null,
   incident: null,
@@ -73,6 +77,10 @@ function setAuthMessage(message, tone) {
 
 function setBridgeMode(label) {
   document.getElementById("bridge-mode").textContent = label;
+}
+
+function cloneStore(store) {
+  return JSON.parse(JSON.stringify(store));
 }
 
 function addLog(line) {
@@ -291,7 +299,11 @@ async function bridgeRequest(action, payload) {
         ...payload
       })
     });
-    return await response.json();
+    const data = await response.json();
+    if (data && data.ok) {
+      setBridgeMode("APPS SCRIPT");
+    }
+    return data;
   } catch (error) {
     setBridgeMode("DEMO FALLBACK");
     return demoRequest(action, payload);
@@ -355,7 +367,7 @@ function demoRequest(action, payload) {
   if (action === "dashboard") {
     return Promise.resolve({
       ok: true,
-      store: state.store
+      store: cloneStore(state.store)
     });
   }
 
@@ -386,6 +398,12 @@ function wireAuth() {
     if (!result.ok) {
       setAuthMessage(result.error || "Login failed.", "alert");
       return;
+    }
+
+    if (result.store) {
+      state.store = result.store;
+      state.incident = (result.store.vault_incidents || [])[0] || state.incident;
+      state.atmNetwork = buildAtmNetwork(result.store);
     }
 
     setAuthMessage("Login accepted. Opening admin terminal.");
@@ -514,10 +532,33 @@ async function boot() {
   wireAuth();
   wireNavigation();
   wireAdminActions();
+  if (CONFIG.apiUrl) {
+    setBridgeMode("CONNECTING");
+    bridgeRequest("health", {}).then((result) => {
+      if (result && result.ok) {
+        setBridgeMode("APPS SCRIPT");
+      }
+    }).catch(() => {
+      setBridgeMode("DEMO FALLBACK");
+    });
+  }
   const session = loadSession();
   if (session) {
-    applySession(session);
-    setInterval(() => setClock("clock-line"), 1000);
+    bridgeRequest("dashboard", {
+      token: session.token,
+      tenant_id: session.tenant_id
+    }).then((result) => {
+      if (result.ok && result.store) {
+        state.store = result.store;
+        state.incident = (result.store.vault_incidents || [])[0] || state.incident;
+        state.atmNetwork = buildAtmNetwork(result.store);
+      }
+      applySession(session);
+      setInterval(() => setClock("clock-line"), 1000);
+    }).catch(() => {
+      applySession(session);
+      setInterval(() => setClock("clock-line"), 1000);
+    });
   }
 }
 

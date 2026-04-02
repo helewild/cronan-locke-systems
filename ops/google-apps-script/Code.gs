@@ -1,6 +1,7 @@
 var SHEETS = {
   tenants: "tenants",
   users: "users",
+  licenses: "licenses",
   accounts: "accounts",
   cards: "cards",
   fines: "fines",
@@ -11,26 +12,37 @@ var SHEETS = {
 };
 
 function doPost(e) {
-  var payload = parsePayload_(e);
-  var action = payload.action || "";
+  try {
+    var payload = parsePayload_(e);
+    var action = payload.action || "";
 
-  if (action === "login") {
-    return json_({ ok: true, session: login_(payload) });
+    if (action === "health") {
+      return json_({ ok: true, status: "online" });
+    }
+
+    if (action === "login") {
+      return json_(login_(payload));
+    }
+
+    if (action === "activate_owner") {
+      return json_(activateOwner_(payload));
+    }
+
+    if (action === "dashboard") {
+      return json_(dashboard_(payload));
+    }
+
+    if (action === "register_tenant_box") {
+      return json_(registerTenantBox_(payload));
+    }
+
+    return json_({ ok: false, error: "Unsupported action." });
+  } catch (error) {
+    return json_({
+      ok: false,
+      error: error.message || "Bridge request failed."
+    });
   }
-
-  if (action === "activate_owner") {
-    return json_(activateOwner_(payload));
-  }
-
-  if (action === "dashboard") {
-    return json_({ ok: true, store: buildDashboardStore_(payload) });
-  }
-
-  if (action === "register_tenant_box") {
-    return json_(registerTenantBox_(payload));
-  }
-
-  return json_({ ok: false, error: "Unsupported action." });
 }
 
 function doGet(e) {
@@ -57,21 +69,27 @@ function json_(data) {
 function login_(payload) {
   var users = readSheet_(SHEETS.users);
   var user = users.filter(function(row) {
-    return row.username === payload.username && row.password_hash === hash_(payload.password);
+    return row.username === payload.username
+      && row.password_hash === hash_(payload.password)
+      && row.status === "ACTIVE";
   })[0];
 
   if (!user) {
-    throw new Error("Invalid username or password.");
+    return { ok: false, error: "Invalid username or password." };
   }
 
   var token = token_();
   updateUserSession_(user.user_id, token);
 
   return {
-    username: user.username,
-    role: user.role,
-    tenant_id: user.tenant_id,
-    token: token
+    ok: true,
+    session: {
+      username: user.username,
+      role: user.role,
+      tenant_id: user.tenant_id,
+      token: token
+    },
+    store: buildDashboardStore_({ tenant_id: user.tenant_id })
   };
 }
 
@@ -98,6 +116,8 @@ function activateOwner_(payload) {
     must_reset_password: "FALSE"
   });
 
+  updateTenantOwner_(tenant.tenant_id, payload.username);
+
   return {
     ok: true,
     message: "Owner account activated."
@@ -107,6 +127,7 @@ function activateOwner_(payload) {
 function registerTenantBox_(payload) {
   var tenantId = "tenant-" + token_().slice(0, 8);
   var activationCode = "ACT-" + token_().slice(0, 10).toUpperCase();
+  var licenseId = "lic-" + token_().slice(0, 8);
 
   appendRow_(SHEETS.tenants, {
     tenant_id: tenantId,
@@ -119,26 +140,88 @@ function registerTenantBox_(payload) {
     created_at: new Date().toISOString()
   });
 
+  appendRow_(SHEETS.licenses, {
+    license_id: licenseId,
+    tenant_id: tenantId,
+    buyer_avatar_name: payload.buyer_avatar_name || "",
+    buyer_avatar_key: payload.buyer_avatar_key || "",
+    marketplace_order_id: payload.marketplace_order_id || "",
+    status: "ACTIVE",
+    issued_at: new Date().toISOString()
+  });
+
   return {
     ok: true,
     tenant_id: tenantId,
-    activation_code: activationCode
+    activation_code: activationCode,
+    license_id: licenseId
+  };
+}
+
+function dashboard_(payload) {
+  var tenantId = validateSession_(payload.token, payload.tenant_id);
+  return {
+    ok: true,
+    store: buildDashboardStore_({ tenant_id: tenantId })
   };
 }
 
 function buildDashboardStore_(payload) {
+  var tenantId = payload.tenant_id || "";
   return {
-    tenants: readSheet_(SHEETS.tenants),
-    accounts: readSheet_(SHEETS.accounts),
-    cards: readSheet_(SHEETS.cards),
-    fines: readSheet_(SHEETS.fines),
-    loans: readSheet_(SHEETS.loans),
+    tenants: filterByTenant_(readSheet_(SHEETS.tenants), tenantId),
+    accounts: filterByTenant_(readSheet_(SHEETS.accounts), tenantId),
+    cards: filterCardsByTenant_(tenantId),
+    fines: filterFinesByTenant_(tenantId),
+    loans: filterLoansByTenant_(tenantId),
     transactions: [],
-    audit_logs: readSheet_(SHEETS.audit),
-    vault_incidents: readSheet_(SHEETS.incidents),
+    audit_logs: filterByTenant_(readSheet_(SHEETS.audit), tenantId),
+    vault_incidents: filterByTenant_(readSheet_(SHEETS.incidents), tenantId),
     branches: [],
     regions: []
   };
+}
+
+function filterByTenant_(rows, tenantId) {
+  if (!tenantId) {
+    return rows;
+  }
+  return rows.filter(function(row) {
+    return row.tenant_id === tenantId;
+  });
+}
+
+function filterCardsByTenant_(tenantId) {
+  if (!tenantId) {
+    return readSheet_(SHEETS.cards);
+  }
+  var accounts = filterByTenant_(readSheet_(SHEETS.accounts), tenantId);
+  var accountIds = accounts.map(function(account) { return account.account_id; });
+  return readSheet_(SHEETS.cards).filter(function(card) {
+    return accountIds.indexOf(card.account_id) !== -1;
+  });
+}
+
+function filterFinesByTenant_(tenantId) {
+  if (!tenantId) {
+    return readSheet_(SHEETS.fines);
+  }
+  var accounts = filterByTenant_(readSheet_(SHEETS.accounts), tenantId);
+  var accountIds = accounts.map(function(account) { return account.account_id; });
+  return readSheet_(SHEETS.fines).filter(function(fine) {
+    return accountIds.indexOf(fine.account_id) !== -1;
+  });
+}
+
+function filterLoansByTenant_(tenantId) {
+  if (!tenantId) {
+    return readSheet_(SHEETS.loans);
+  }
+  var accounts = filterByTenant_(readSheet_(SHEETS.accounts), tenantId);
+  var accountIds = accounts.map(function(account) { return account.account_id; });
+  return readSheet_(SHEETS.loans).filter(function(loan) {
+    return accountIds.indexOf(loan.account_id) !== -1;
+  });
 }
 
 function readSheet_(name) {
@@ -162,11 +245,32 @@ function readSheet_(name) {
 
 function appendRow_(sheetName, record) {
   var sheet = SpreadsheetApp.getActive().getSheetByName(sheetName);
+  if (!sheet) {
+    throw new Error("Missing sheet: " + sheetName);
+  }
   var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
   var row = headers.map(function(header) {
     return record[header] || "";
   });
   sheet.appendRow(row);
+}
+
+function updateTenantOwner_(tenantId, username) {
+  var sheet = SpreadsheetApp.getActive().getSheetByName(SHEETS.tenants);
+  if (!sheet) {
+    return;
+  }
+  var values = sheet.getDataRange().getValues();
+  var headers = values[0];
+  var tenantIdIndex = headers.indexOf("tenant_id");
+  var ownerIndex = headers.indexOf("owner_username");
+
+  for (var i = 1; i < values.length; i += 1) {
+    if (values[i][tenantIdIndex] === tenantId) {
+      sheet.getRange(i + 1, ownerIndex + 1).setValue(username);
+      return;
+    }
+  }
 }
 
 function updateUserSession_(userId, token) {
@@ -184,6 +288,21 @@ function updateUserSession_(userId, token) {
       return;
     }
   }
+}
+
+function validateSession_(token, tenantId) {
+  var users = readSheet_(SHEETS.users);
+  var user = users.filter(function(row) {
+    return row.session_token === token
+      && row.tenant_id === tenantId
+      && row.status === "ACTIVE";
+  })[0];
+
+  if (!user) {
+    throw new Error("Invalid or expired session.");
+  }
+
+  return user.tenant_id;
 }
 
 function hash_(value) {

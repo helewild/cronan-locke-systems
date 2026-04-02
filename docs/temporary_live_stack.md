@@ -43,8 +43,34 @@ The Apps Script layer should be responsible for:
 - owner activation validation
 - username/password login
 - session token issuance
+- session token validation
 - admin dashboard payloads
 - light admin actions during the temporary phase
+
+## Website Configuration
+
+To point the live GitHub Pages site at your Apps Script deployment, update:
+
+- [site-config.js](/C:/Users/Alex/Documents/New%20project/site-config.js)
+
+Example:
+
+```js
+window.CRONAN_LOCKE_CONFIG = {
+  apiUrl: "https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec",
+  siteMode: "live"
+};
+```
+
+## Current Temporary Website
+
+The live GitHub Pages site now supports:
+
+- login-first access
+- first-time owner setup
+- session persistence in the browser
+- authenticated admin terminal reveal after login
+- demo fallback when the bridge is not yet connected
 
 ## Migration Later
 
