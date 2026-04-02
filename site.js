@@ -22,6 +22,10 @@ const state = {
   setupUsers: {}
 };
 
+function safeArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
 function nowStamp() {
   return "[" + new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }) + "]";
 }
@@ -103,8 +107,17 @@ function renderLogs() {
 }
 
 function buildAtmNetwork(store) {
-  const branch = (store.branches || [])[0];
-  const tenant = (store.tenants || [])[0];
+  if (safeArray(store.atms).length) {
+    return store.atms.map((atm) => ({
+      id: atm.atm_id || atm.id || "atm",
+      branch: atm.branch_name || atm.branch || "Main Branch",
+      status: atm.status || "ONLINE",
+      scope: atm.scope || ((store.tenants || [])[0]?.name || "Tenant")
+    }));
+  }
+
+  const branch = safeArray(store.branches)[0];
+  const tenant = safeArray(store.tenants)[0];
   return [
     {
       id: "atm-001",
@@ -122,19 +135,19 @@ function buildAtmNetwork(store) {
 }
 
 function renderTenant() {
-  const tenant = (state.store.tenants || [])[0];
+  const tenant = safeArray(state.store.tenants)[0];
   document.getElementById("tenant-name").textContent = tenant ? tenant.name.toUpperCase() : "NO TENANT";
   document.getElementById("tenant-bank").textContent = tenant ? tenant.bank_name.toUpperCase() : "NO BANK";
 }
 
 function renderMetrics() {
   const store = state.store;
-  document.getElementById("metric-tenants").textContent = (store.tenants || []).length;
-  document.getElementById("metric-accounts").textContent = (store.accounts || []).length;
-  document.getElementById("metric-cards").textContent = (store.cards || []).length;
-  document.getElementById("metric-incidents").textContent = (store.vault_incidents || []).filter((item) => item.state === "ACTIVE").length;
-  document.getElementById("metric-fines").textContent = (store.fines || []).filter((item) => item.status === "DUE").length;
-  document.getElementById("metric-loans").textContent = (store.loans || []).filter((item) => item.status === "ACTIVE").length;
+  document.getElementById("metric-tenants").textContent = safeArray(store.tenants).length;
+  document.getElementById("metric-accounts").textContent = safeArray(store.accounts).length;
+  document.getElementById("metric-cards").textContent = safeArray(store.cards).length;
+  document.getElementById("metric-incidents").textContent = safeArray(store.vault_incidents).filter((item) => item.state === "ACTIVE").length;
+  document.getElementById("metric-fines").textContent = safeArray(store.fines).filter((item) => item.status === "DUE").length;
+  document.getElementById("metric-loans").textContent = safeArray(store.loans).filter((item) => item.status === "ACTIVE").length;
 }
 
 function updateSystemStatus() {
@@ -152,6 +165,34 @@ function renderIncident() {
   document.getElementById("incident-unit").textContent = incident ? incident.responding_unit : "-";
   document.getElementById("incident-update").textContent = incident ? incident.last_update.toUpperCase() : "-";
   updateSystemStatus();
+}
+
+function getTransactions(store) {
+  const liveTransactions = safeArray(store.transactions);
+  if (liveTransactions.length) {
+    return liveTransactions;
+  }
+
+  return safeArray(store.audit_logs).map((audit, index) => ({
+    transaction_id: audit.audit_id || `audit-${index}`,
+    account_id: audit.target_account_id || "",
+    type: String(audit.action || "audit").toUpperCase(),
+    amount: Number(audit.amount || 0),
+    direction: Number(audit.amount || 0) < 0 ? "OUT" : "IN",
+    memo: audit.memo || ""
+  }));
+}
+
+function applyStore(store) {
+  state.store = store;
+  state.incident = safeArray(store.vault_incidents)[0] || null;
+  state.atmNetwork = buildAtmNetwork(store);
+  renderTenant();
+  renderMetrics();
+  renderIncident();
+  seedLogs(store);
+  renderLogs();
+  setActiveView(state.view);
 }
 
 function renderTable(view) {
@@ -184,7 +225,7 @@ function renderTable(view) {
   } else if (view === "transactions") {
     title.textContent = "Transactions";
     columns = ["Type", "Account", "Amount", "Direction"];
-    rows = (store.transactions || []).map((txn) => [
+    rows = getTransactions(store).map((txn) => [
       txn.type,
       txn.account_id,
       { money: txn.amount },
@@ -202,7 +243,7 @@ function renderTable(view) {
   } else if (view === "incidents") {
     title.textContent = "Incidents";
     columns = ["Incident ID", "Actor", "Stage", "State"];
-    rows = (store.vault_incidents || []).map((incident) => [
+    rows = safeArray(store.vault_incidents).map((incident) => [
       incident.incident_id,
       incident.actor_name,
       incident.stage,
@@ -211,7 +252,7 @@ function renderTable(view) {
   } else if (view === "payroll") {
     title.textContent = "Payroll";
     columns = ["Type", "Account", "Amount", "Memo"];
-    rows = (store.transactions || [])
+    rows = getTransactions(store)
       .filter((txn) => txn.type === "PAYROLL")
       .map((txn) => [txn.type, txn.account_id, { money: txn.amount }, txn.memo]);
   } else if (view === "atm-network") {
@@ -226,7 +267,7 @@ function renderTable(view) {
   } else if (view === "audit-logs") {
     title.textContent = "Audit Logs";
     columns = ["Action", "Actor", "Target", "Status"];
-    rows = (store.audit_logs || []).map((audit) => [
+    rows = safeArray(store.audit_logs).map((audit) => [
       audit.action,
       audit.actor_name,
       audit.target_account_id || audit.object_id,
@@ -252,6 +293,8 @@ function setActiveView(view) {
   document.querySelectorAll(".nav-link").forEach((link) => {
     link.classList.toggle("active", link.dataset.view === view);
   });
+  const actionButton = document.getElementById("view-action-btn");
+  actionButton.classList.toggle("hidden", view !== "payroll");
   renderTable(view);
   savePreviewState();
 }
@@ -272,11 +315,7 @@ function applySession(session) {
   document.getElementById("admin-role").textContent = (session.role || "tenant_owner").toUpperCase().replaceAll("_", " ");
   document.getElementById("header-user-line").textContent = "USERNAME: " + session.username.toUpperCase();
   setClock("clock-line");
-  renderTenant();
-  renderMetrics();
-  renderIncident();
-  renderLogs();
-  setActiveView(state.view);
+  applyStore(state.store);
 }
 
 function logout() {
@@ -312,6 +351,23 @@ async function bridgeRequest(action, payload) {
     setBridgeMode("DEMO FALLBACK");
     return demoRequest(action, payload);
   }
+}
+
+async function runAdminAction(actionType, extras = {}) {
+  if (!state.session) {
+    return { ok: false, error: "Login required." };
+  }
+
+  const payload = {
+    token: state.session.token,
+    tenant_id: state.session.tenant_id,
+    username: state.session.username,
+    actor_name: state.session.username,
+    action_type: actionType,
+    ...extras
+  };
+
+  return bridgeRequest("admin_action", payload);
 }
 
 function demoRequest(action, payload) {
@@ -405,9 +461,7 @@ function wireAuth() {
     }
 
     if (result.store) {
-      state.store = result.store;
-      state.incident = (result.store.vault_incidents || [])[0] || state.incident;
-      state.atmNetwork = buildAtmNetwork(result.store);
+      applyStore(result.store);
     }
 
     setAuthMessage("Login accepted. Opening admin terminal.");
@@ -443,54 +497,80 @@ function wireAuth() {
 }
 
 function wireAdminActions() {
-  document.getElementById("dispatch-btn").addEventListener("click", () => {
+  document.getElementById("dispatch-btn").addEventListener("click", async () => {
     if (!state.incident) {
       return;
     }
-    state.incident.stage = "UNIT DISPATCHED";
-    state.incident.responding_unit = "UNIT 12";
-    state.incident.last_update = "Dispatch authorized. Unit 12 en route.";
-    renderIncident();
-    renderTable(state.view);
-    addLog("Police dispatch sent to " + state.incident.vault_id);
+    const result = await runAdminAction("dispatch_police", {
+      incident_id: state.incident.incident_id
+    });
+    if (!result.ok) {
+      addLog(result.error || "Dispatch request failed.");
+      return;
+    }
+    applyStore(result.store);
+    addLog(result.message || ("Police dispatch sent to " + state.incident.vault_id));
   });
 
-  document.getElementById("lock-btn").addEventListener("click", () => {
+  document.getElementById("lock-btn").addEventListener("click", async () => {
     if (!state.incident) {
       return;
     }
-    state.incident.stage = "LOCKDOWN TRIGGERED";
-    state.incident.last_update = "Remote vault lockdown authorized from admin terminal.";
-    renderIncident();
-    renderTable(state.view);
-    addLog("Vault lockdown triggered for " + state.incident.vault_id);
+    const result = await runAdminAction("lock_vault", {
+      incident_id: state.incident.incident_id
+    });
+    if (!result.ok) {
+      addLog(result.error || "Vault lockdown request failed.");
+      return;
+    }
+    applyStore(result.store);
+    addLog(result.message || ("Vault lockdown triggered for " + state.incident.vault_id));
   });
 
-  document.getElementById("shutdown-btn").addEventListener("click", () => {
-    state.atmNetwork = state.atmNetwork.map((atm) => ({
-      ...atm,
-      status: "OFFLINE"
-    }));
-    renderTable(state.view);
-    updateSystemStatus();
-    savePreviewState();
-    addLog("ATM network shutdown queued for demo tenant");
+  document.getElementById("shutdown-btn").addEventListener("click", async () => {
+    const result = await runAdminAction("shutdown_atm_network");
+    if (!result.ok) {
+      addLog(result.error || "ATM shutdown failed.");
+      return;
+    }
+    applyStore(result.store);
+    addLog(result.message || "ATM network shutdown queued.");
   });
 
   document.getElementById("refresh-btn").addEventListener("click", async () => {
     const result = await bridgeRequest("dashboard", {
-      token: state.session ? state.session.token : ""
+      token: state.session ? state.session.token : "",
+      tenant_id: state.session ? state.session.tenant_id : ""
     });
     if (result.ok && result.store) {
-      state.store = result.store;
-      renderMetrics();
-      renderTable(state.view);
+      applyStore(result.store);
     }
     addLog("Manual refresh executed for " + state.view.toUpperCase());
   });
 
-  document.getElementById("manage-tenant-btn").addEventListener("click", () => {
-    addLog("Tenant management requested for current owner session");
+  document.getElementById("manage-tenant-btn").addEventListener("click", async () => {
+    const result = await runAdminAction("manage_tenant");
+    if (!result.ok) {
+      addLog(result.error || "Tenant management request failed.");
+      return;
+    }
+    if (result.store) {
+      applyStore(result.store);
+    }
+    addLog(result.message || "Tenant management requested.");
+  });
+
+  document.getElementById("view-action-btn").addEventListener("click", async () => {
+    if (state.view !== "payroll") {
+      return;
+    }
+    const result = await runAdminAction("run_payroll");
+    if (!result.ok) {
+      addLog(result.error || "Payroll run failed.");
+      return;
+    }
+    applyStore(result.store);
+    addLog(result.message || "Payroll applied.");
   });
 
   document.getElementById("logout-btn").addEventListener("click", logout);
@@ -503,13 +583,13 @@ function seedLogs(store) {
   }
 
   const lines = [];
-  (store.transactions || []).slice(0, 2).forEach((txn) => {
+  getTransactions(store).slice(0, 2).forEach((txn) => {
     lines.push(nowStamp() + " " + txn.type + " - L$" + txn.amount + " - " + txn.account_id);
   });
-  (store.audit_logs || []).slice(0, 1).forEach((audit) => {
+  safeArray(store.audit_logs).slice(0, 1).forEach((audit) => {
     lines.push(nowStamp() + " " + audit.action + " - " + (audit.target_account_id || audit.object_id));
   });
-  const incident = (store.vault_incidents || [])[0];
+  const incident = safeArray(store.vault_incidents)[0];
   if (incident) {
     lines.push(nowStamp() + " Vault Alarm Triggered");
   }
@@ -523,7 +603,7 @@ async function boot() {
   const saved = loadPreviewState();
 
   state.store = store;
-  state.incident = saved && saved.incident ? saved.incident : ((store.vault_incidents || [])[0] || null);
+  state.incident = saved && saved.incident ? saved.incident : (safeArray(store.vault_incidents)[0] || null);
   state.logs = saved && Array.isArray(saved.logs) ? saved.logs : [];
   state.view = saved && saved.view ? saved.view : "accounts";
   state.atmNetwork = saved && Array.isArray(saved.atmNetwork) && saved.atmNetwork.length
@@ -554,8 +634,6 @@ async function boot() {
     }).then((result) => {
       if (result.ok && result.store) {
         state.store = result.store;
-        state.incident = (result.store.vault_incidents || [])[0] || state.incident;
-        state.atmNetwork = buildAtmNetwork(result.store);
       }
       applySession(session);
       setInterval(() => setClock("clock-line"), 1000);

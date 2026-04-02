@@ -223,6 +223,11 @@ body { padding: 10px; }
 .tab-row,
 .subfoot { display: flex; gap: 8px; }
 
+.view-actions {
+  display: flex;
+  gap: 8px;
+}
+
 .tab-row { margin-bottom: 14px; }
 
 .subfoot {
