@@ -287,6 +287,7 @@ function renderTable(view) {
       { chip: account.status, tone: account.status === "ACTIVE" ? "" : "dim" },
       {
         actions: [
+          { label: "New Account", kind: "create-account", permission: "create_customer_account" },
           { label: "Deposit", kind: "deposit", accountId: account.account_id, permission: "deposit_account" },
           { label: "Withdraw", kind: "withdraw", accountId: account.account_id, permission: "withdraw_account" },
           account.status === "ACTIVE"
@@ -439,7 +440,9 @@ function setActiveView(view) {
     link.classList.toggle("hidden", !canAccessView(link.dataset.view));
   });
   const actionButton = document.getElementById("view-action-btn");
-  actionButton.classList.toggle("hidden", view !== "payroll");
+  actionButton.classList.toggle("hidden", !(view === "payroll" || view === "accounts"));
+  actionButton.textContent = view === "accounts" ? "New Account" : "Run Payroll";
+  actionButton.disabled = view === "accounts" ? !hasPermission("create_customer_account") : (view === "payroll" ? !hasPermission("run_payroll") : false);
   renderTable(view);
   savePreviewState();
 }
@@ -560,12 +563,41 @@ async function runAdminAction(actionType, extras = {}) {
 }
 
 async function runAccountAction(kind, accountId) {
+  if (kind === "create-account") {
+    const avatarName = window.prompt("Customer avatar or display name:", "");
+    if (!avatarName) {
+      return;
+    }
+    const depositRaw = window.prompt("Opening deposit amount:", "0");
+    if (depositRaw === null) {
+      return;
+    }
+    const openingDeposit = Number(depositRaw);
+    if (!Number.isFinite(openingDeposit) || openingDeposit < 0) {
+      addLog("Opening deposit must be zero or greater.");
+      return;
+    }
+    const issueCard = window.confirm("Issue a starting bank card for this account?");
+    const result = await runAdminAction("create_customer_account", {
+      avatar_name: avatarName.trim(),
+      opening_deposit: openingDeposit,
+      issue_card: issueCard
+    });
+    if (!result.ok) {
+      addLog(result.error || "Account creation failed.");
+      return;
+    }
+    applyStore(result.store);
+    addLog(result.message || `Created account for ${avatarName.trim()}.`);
+    return;
+  }
+
   if (!accountId) {
     addLog("Missing account id for action.");
     return;
   }
 
-    if (kind === "deposit" || kind === "withdraw") {
+  if (kind === "deposit" || kind === "withdraw") {
     const raw = window.prompt(`Enter ${kind} amount in Linden dollars:`, "100");
     if (raw === null) {
       return;
@@ -828,7 +860,7 @@ function wireAdminActions() {
       return;
     }
     const kind = button.dataset.rowAction;
-    if (["deposit", "withdraw", "freeze", "unfreeze"].includes(kind)) {
+    if (["create-account", "deposit", "withdraw", "freeze", "unfreeze"].includes(kind)) {
       await runAccountAction(kind, button.dataset.accountId);
       return;
     }
@@ -944,6 +976,10 @@ function wireAdminActions() {
   });
 
   document.getElementById("view-action-btn").addEventListener("click", async () => {
+    if (state.view === "accounts") {
+      await runAccountAction("create-account");
+      return;
+    }
     if (state.view !== "payroll") {
       return;
     }

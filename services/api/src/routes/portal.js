@@ -42,6 +42,7 @@ const ROLE_PERMISSIONS = {
     "disable_staff_user",
     "enable_staff_user",
     "reset_staff_session",
+    "create_customer_account",
     "deposit_account",
     "withdraw_account",
     "freeze_account",
@@ -65,6 +66,7 @@ const ROLE_PERMISSIONS = {
     "view_loans",
     "view_payroll",
     "view_audit_logs",
+    "create_customer_account",
     "deposit_account",
     "withdraw_account",
     "freeze_account",
@@ -82,6 +84,7 @@ const ROLE_PERMISSIONS = {
     "view_transactions",
     "view_fines",
     "view_loans",
+    "create_customer_account",
     "deposit_account",
     "withdraw_account",
     "lock_card",
@@ -210,6 +213,14 @@ function findLoan(store, tenantId, loanId) {
 
 function findUserById(store, tenantId, userId) {
   return (store.users || []).find((item) => item.tenant_id === tenantId && item.user_id === userId) || null;
+}
+
+function nextId(prefix, values) {
+  const numeric = values
+    .map((value) => Number(String(value || "").replace(prefix, "")))
+    .filter((value) => Number.isFinite(value));
+  const next = (numeric.length ? Math.max(...numeric) : 10000) + 1;
+  return prefix + String(next);
 }
 
 function appendPortalAudit(store, actorName, tenantId, objectType, objectId, targetAccountId, action, amount, memo) {
@@ -597,6 +608,70 @@ function resetStaffSession(store, tenantId, actorName, userId) {
   appendPortalAudit(store, actorName, tenantId, "user", user.user_id, null, "staff_user_session_reset", 0, "Staff session cleared");
 }
 
+function createCustomerAccount(store, tenantId, actorName, payload) {
+  const avatarName = String(payload.avatar_name || "").trim();
+  const openingDeposit = Number(payload.opening_deposit || 0);
+  const issueCard = Boolean(payload.issue_card);
+  const branchId = String(payload.branch_id || "main-branch").trim();
+
+  if (!avatarName) {
+    throw new Error("Avatar name is required.");
+  }
+  if (!Number.isFinite(openingDeposit) || openingDeposit < 0) {
+    throw new Error("Opening deposit must be zero or greater.");
+  }
+
+  if (!Array.isArray(store.players)) {
+    store.players = [];
+  }
+
+  const playerId = nextId("PLY-", store.players.map((item) => item.player_id));
+  const accountId = nextId("WPB-ACCT-", (store.accounts || []).map((item) => item.account_id));
+
+  store.players.push({
+    player_id: playerId,
+    tenant_id: tenantId,
+    avatar_name: avatarName,
+    status: "ACTIVE"
+  });
+
+  store.accounts.push({
+    account_id: accountId,
+    tenant_id: tenantId,
+    branch_id: branchId,
+    player_id: playerId,
+    customer_name: avatarName,
+    balance: openingDeposit,
+    cash_on_hand: 0,
+    outstanding_fine: 0,
+    loan_balance: 0,
+    status: "ACTIVE"
+  });
+
+  if (openingDeposit > 0) {
+    createTransaction(store, {
+      account_id: accountId,
+      type: "OPENING_DEPOSIT",
+      amount: openingDeposit,
+      direction: "IN",
+      memo: "Initial account funding"
+    });
+  }
+
+  if (issueCard) {
+    const cardId = nextId("WPB-CARD-", (store.cards || []).map((item) => item.card_id));
+    const accountSuffix = String(accountId).split("-").pop() || "10001";
+    store.cards.push({
+      card_id: cardId,
+      account_id: accountId,
+      card_number: "5326-" + accountSuffix.slice(0, 4).padStart(4, "0") + "-0000-0001",
+      state: "ACTIVE"
+    });
+  }
+
+  appendPortalAudit(store, actorName, tenantId, "account", accountId, accountId, "account_create", openingDeposit, "Created customer account for " + avatarName);
+}
+
 async function adminAction(store, payload) {
   const user = requireSession(store, payload);
   const actorName = payload.actor_name || user.username;
@@ -641,6 +716,10 @@ async function adminAction(store, payload) {
     case "deposit_account":
       requirePermission(user, "deposit_account");
       updateAccountBalance(store, user.tenant_id, actorName, payload.account_id, Number(payload.amount || 0), "DEPOSIT");
+      break;
+    case "create_customer_account":
+      requirePermission(user, "create_customer_account");
+      createCustomerAccount(store, user.tenant_id, actorName, payload);
       break;
     case "withdraw_account":
       requirePermission(user, "withdraw_account");
