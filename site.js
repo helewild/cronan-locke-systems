@@ -154,14 +154,49 @@ function buildAtmNetwork(store) {
   ];
 }
 
+function initialsFromName(value) {
+  const parts = String(value || "").trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) {
+    return "CL";
+  }
+  if (parts.length === 1) {
+    return parts[0].slice(0, 2).toUpperCase();
+  }
+  return (parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase();
+}
+
+function splitBankDisplay(value) {
+  const parts = String(value || "").trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) {
+    return ["NO BANK", ""];
+  }
+  if (parts.length === 1) {
+    return [parts[0].toUpperCase(), ""];
+  }
+  const last = parts.pop();
+  return [parts.join(" ").toUpperCase(), last.toUpperCase()];
+}
+
 function renderTenant() {
   const tenantLabel = document.querySelector(".tenant-card .side-label");
+  const crestShield = document.getElementById("crest-shield");
+  const crestSubtitle = document.getElementById("crest-subtitle");
+  const crestTitle = document.getElementById("crest-title");
   if (state.session?.role === "platform_admin") {
     if (tenantLabel) {
       tenantLabel.textContent = "Platform Scope";
     }
     document.getElementById("tenant-name").textContent = "CRONAN & LOCKE";
     document.getElementById("tenant-bank").textContent = "PLATFORM CONTROL";
+    if (crestShield) {
+      crestShield.textContent = "CL";
+    }
+    if (crestSubtitle) {
+      crestSubtitle.textContent = "CRONAN & LOCKE";
+    }
+    if (crestTitle) {
+      crestTitle.textContent = "SYSTEMS";
+    }
     return;
   }
   if (tenantLabel) {
@@ -170,6 +205,18 @@ function renderTenant() {
   const tenant = safeArray(state.store.tenants)[0];
   document.getElementById("tenant-name").textContent = tenant ? tenant.name.toUpperCase() : "NO TENANT";
   document.getElementById("tenant-bank").textContent = tenant ? tenant.bank_name.toUpperCase() : "NO BANK";
+  if (tenant) {
+    const bankParts = splitBankDisplay(tenant.bank_name);
+    if (crestShield) {
+      crestShield.textContent = initialsFromName(tenant.bank_name);
+    }
+    if (crestSubtitle) {
+      crestSubtitle.textContent = bankParts[0];
+    }
+    if (crestTitle) {
+      crestTitle.textContent = bankParts[1];
+    }
+  }
 }
 
 function renderMetrics() {

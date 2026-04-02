@@ -1,8 +1,8 @@
 string CONFIG_PLATFORM_NAME = "Cronan & Locke Systems";
-string CONFIG_BANK_NAME = "Whispering Pines Bank";
+string CONFIG_BANK_NAME = "";
 string CONFIG_API_URL = "http://15.204.56.251/api/v1/portal";
 string CONFIG_SETUP_SECRET = "REPLACE_ME_SETUP_SECRET";
-string CONFIG_DEFAULT_REGION_NAME = "Main Region";
+string CONFIG_DEFAULT_REGION_NAME = "";
 integer CONFIG_PAYROLL_DEFAULT = 250;
 
 key gPendingRequest = NULL_KEY;
@@ -26,13 +26,25 @@ string avatarName(key avatar)
 string jsonPayload(key avatar)
 {
     string buyer = avatarName(avatar);
+    string bankName = CONFIG_BANK_NAME;
+    string regionName = CONFIG_DEFAULT_REGION_NAME;
+
+    if (bankName == "")
+    {
+        bankName = buyer + " Bank";
+    }
+
+    if (regionName == "")
+    {
+        regionName = buyer + " Region";
+    }
 
     return llList2Json(JSON_OBJECT, [
         "action", "register_tenant_box",
         "setup_secret", CONFIG_SETUP_SECRET,
         "tenant_name", buyer,
-        "bank_name", CONFIG_BANK_NAME,
-        "primary_region_name", CONFIG_DEFAULT_REGION_NAME,
+        "bank_name", bankName,
+        "primary_region_name", regionName,
         "payroll_default_amount", CONFIG_PAYROLL_DEFAULT,
         "buyer_avatar_name", buyer,
         "buyer_avatar_key", (string)avatar,
