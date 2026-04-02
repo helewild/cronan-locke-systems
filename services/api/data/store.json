@@ -9,6 +9,8 @@
       "owner_username": "admin",
       "activation_code": "DEMO-OWNER-001",
       "created_at": "2026-04-02T00:00:00Z",
+      "payroll_default_amount": 250,
+      "primary_region_name": "Whispering Pines Main Region",
       "feature_flags": [
         "base_banking",
         "justice_and_fines",

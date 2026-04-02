@@ -215,6 +215,10 @@ function findUserById(store, tenantId, userId) {
   return (store.users || []).find((item) => item.tenant_id === tenantId && item.user_id === userId) || null;
 }
 
+function findTenant(store, tenantId) {
+  return (store.tenants || []).find((item) => item.tenant_id === tenantId) || null;
+}
+
 function nextId(prefix, values) {
   const numeric = values
     .map((value) => Number(String(value || "").replace(prefix, "")))
@@ -415,7 +419,8 @@ function shutdownAtmNetwork(store, tenantId, actorName) {
 }
 
 function runPayroll(store, tenantId, actorName, amountInput) {
-  const amount = Number(amountInput || 250);
+  const tenant = findTenant(store, tenantId);
+  const amount = Number(amountInput || tenant?.payroll_default_amount || 250);
   if (!Number.isFinite(amount) || amount <= 0) {
     throw new Error("Amount must be greater than zero.");
   }
@@ -436,6 +441,48 @@ function runPayroll(store, tenantId, actorName, amountInput) {
     });
     appendPortalAudit(store, actorName, tenantId, "payroll", "vps-payroll", account.account_id, "payroll_run", amount, "Payroll deposit");
   });
+}
+
+function updateTenantSettings(store, tenantId, actorName, payload) {
+  const tenant = findTenant(store, tenantId);
+  if (!tenant) {
+    throw new Error("Tenant not found.");
+  }
+
+  const nextTenantName = String(payload.tenant_name || tenant.name).trim();
+  const nextBankName = String(payload.bank_name || tenant.bank_name).trim();
+  const nextRegionName = String(payload.primary_region_name || tenant.primary_region_name || "").trim();
+  const nextPayroll = Number(payload.payroll_default_amount ?? tenant.payroll_default_amount ?? 250);
+
+  if (!nextTenantName || !nextBankName) {
+    throw new Error("Tenant and bank name are required.");
+  }
+  if (!Number.isFinite(nextPayroll) || nextPayroll <= 0) {
+    throw new Error("Payroll default must be greater than zero.");
+  }
+
+  tenant.name = nextTenantName;
+  tenant.bank_name = nextBankName;
+  tenant.primary_region_name = nextRegionName;
+  tenant.payroll_default_amount = nextPayroll;
+
+  const regions = (store.regions || []).filter((item) => item.tenant_id === tenantId);
+  if (regions.length && nextRegionName) {
+    regions[0].name = nextRegionName;
+  }
+
+  const branches = (store.branches || []).filter((item) => item.tenant_id === tenantId);
+  if (branches.length) {
+    branches[0].name = nextBankName + " Main Branch";
+  }
+
+  (store.atms || []).forEach((atm) => {
+    if (atm.tenant_id === tenantId) {
+      atm.scope = nextTenantName;
+    }
+  });
+
+  appendPortalAudit(store, actorName, tenantId, "tenant", tenantId, null, "tenant_settings_update", nextPayroll, "Tenant settings updated");
 }
 
 function updateCardState(store, tenantId, actorName, cardId, nextState, action, memo) {
@@ -696,6 +743,10 @@ async function adminAction(store, payload) {
     case "manage_tenant":
       requirePermission(user, "manage_tenant");
       appendPortalAudit(store, actorName, user.tenant_id, "website", "tenant-console", null, "tenant_manage_open", 0, "Tenant management opened");
+      break;
+    case "update_tenant_settings":
+      requirePermission(user, "manage_tenant");
+      updateTenantSettings(store, user.tenant_id, actorName, payload);
       break;
     case "create_staff_user":
       requirePermission(user, "create_staff_user");

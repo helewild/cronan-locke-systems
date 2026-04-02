@@ -316,6 +316,10 @@ function renderDetailPanel() {
   panel.classList.remove("hidden");
 }
 
+function getCurrentTenant() {
+  return safeArray(state.store?.tenants)[0] || null;
+}
+
 function applyStore(store) {
   state.store = store;
   ensureSelectedAccount(store);
@@ -1044,7 +1048,7 @@ function wireAdminActions() {
   });
 
   document.getElementById("manage-tenant-btn").addEventListener("click", async () => {
-    const username = window.prompt("Create staff username, or leave blank to just open tenant management:", "");
+    const username = window.prompt("Create staff username, or leave blank to edit tenant settings:", "");
     if (username && username.trim()) {
       const avatarName = window.prompt("Staff avatar or display name:", username.trim());
       const role = window.prompt("Staff role (bank_admin, teller, security_admin):", "bank_admin");
@@ -1069,7 +1073,30 @@ function wireAdminActions() {
       return;
     }
 
-    const result = await runAdminAction("manage_tenant");
+    const tenant = getCurrentTenant();
+    const tenantName = window.prompt("Tenant display name:", tenant?.name || "");
+    if (tenantName === null) {
+      return;
+    }
+    const bankName = window.prompt("Bank display name:", tenant?.bank_name || "");
+    if (bankName === null) {
+      return;
+    }
+    const regionName = window.prompt("Primary region name:", tenant?.primary_region_name || "");
+    if (regionName === null) {
+      return;
+    }
+    const payrollRaw = window.prompt("Default payroll amount:", String(tenant?.payroll_default_amount || 250));
+    if (payrollRaw === null) {
+      return;
+    }
+
+    const result = await runAdminAction("update_tenant_settings", {
+      tenant_name: tenantName.trim(),
+      bank_name: bankName.trim(),
+      primary_region_name: regionName.trim(),
+      payroll_default_amount: Number(payrollRaw)
+    });
     if (!result.ok) {
       addLog(result.error || "Tenant management request failed.");
       return;

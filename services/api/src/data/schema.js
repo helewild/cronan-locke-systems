@@ -11,10 +11,15 @@ export const STORE_TABLES = [
       "owner_username",
       "activation_code",
       "created_at",
+      "payroll_default_amount",
+      "primary_region_name",
       "feature_flags"
     ],
     jsonColumns: ["feature_flags"],
+    numberColumns: ["payroll_default_amount"],
     defaults: {
+      payroll_default_amount: 250,
+      primary_region_name: "",
       feature_flags: []
     }
   },
@@ -168,6 +173,8 @@ export const CREATE_TABLE_STATEMENTS = [
     owner_username TEXT,
     activation_code TEXT,
     created_at TIMESTAMPTZ,
+    payroll_default_amount NUMERIC(18,2) NOT NULL DEFAULT 250,
+    primary_region_name TEXT,
     feature_flags JSONB NOT NULL DEFAULT '[]'::jsonb
   )`,
   `CREATE TABLE IF NOT EXISTS users (
@@ -274,5 +281,7 @@ export const CREATE_TABLE_STATEMENTS = [
     branch_name TEXT,
     status TEXT NOT NULL,
     scope TEXT
-  )`
+  )`,
+  `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS payroll_default_amount NUMERIC(18,2) NOT NULL DEFAULT 250`,
+  `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS primary_region_name TEXT`
 ];
