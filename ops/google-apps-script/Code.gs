@@ -193,6 +193,18 @@ function adminAction_(payload) {
   } else if (actionType === "lock_vault") {
     lockVault_(tenantId, actorName, payload.incident_id || "");
     message = "Vault lockdown triggered.";
+  } else if (actionType === "deposit_account") {
+    updateAccountBalance_(tenantId, actorName, payload.account_id || "", numberOrZero_(payload.amount), "DEPOSIT");
+    message = "Deposit applied.";
+  } else if (actionType === "withdraw_account") {
+    updateAccountBalance_(tenantId, actorName, payload.account_id || "", numberOrZero_(payload.amount) * -1, "WITHDRAW");
+    message = "Withdrawal applied.";
+  } else if (actionType === "freeze_account") {
+    updateAccountStatus_(tenantId, actorName, payload.account_id || "", "FROZEN");
+    message = "Account frozen.";
+  } else if (actionType === "unfreeze_account") {
+    updateAccountStatus_(tenantId, actorName, payload.account_id || "", "ACTIVE");
+    message = "Account unfrozen.";
   } else if (actionType === "shutdown_atm_network") {
     shutdownAtmNetwork_(tenantId, actorName);
     message = "ATM network marked offline.";
@@ -323,6 +335,83 @@ function dispatchPolice_(tenantId, actorName, incidentId) {
     status: "approved",
     amount: "",
     memo: "Unit 12 dispatched to " + (row[context.headerIndex.vault_id] || "vault")
+  });
+}
+
+function updateAccountBalance_(tenantId, actorName, accountId, delta, actionLabel) {
+  if (!accountId) {
+    throw new Error("Missing account id.");
+  }
+  if (!delta || delta === 0) {
+    throw new Error("Amount must be greater than zero.");
+  }
+
+  var context = getSheetContext_(SHEETS.accounts);
+  var accountIndex = findRowById_(context, "account_id", accountId, tenantId);
+  if (accountIndex === -1) {
+    throw new Error("Account not found.");
+  }
+
+  var statusColumn = requireHeaderIndex_(context.headers, "status", SHEETS.accounts);
+  var balanceColumn = requireHeaderIndex_(context.headers, "balance", SHEETS.accounts);
+  var customerColumn = requireHeaderIndex_(context.headers, "customer_name", SHEETS.accounts);
+  var status = String(context.rows[accountIndex][statusColumn] || "").trim();
+  if (status !== "ACTIVE") {
+    throw new Error("Account is not active.");
+  }
+
+  var currentBalance = numberOrZero_(context.rows[accountIndex][balanceColumn]);
+  var nextBalance = currentBalance + delta;
+  if (nextBalance < 0) {
+    throw new Error("Insufficient funds for withdrawal.");
+  }
+
+  context.sheet.getRange(accountIndex + 2, balanceColumn + 1).setValue(nextBalance);
+
+  appendAuditLog_(tenantId, {
+    actor_name: actorName,
+    object_type: "account",
+    object_id: accountId,
+    target_account_id: accountId,
+    action: actionLabel === "DEPOSIT" ? "account_deposit" : "account_withdraw",
+    status: "approved",
+    amount: Math.abs(delta),
+    memo: actionLabel + " via web terminal for " + (context.rows[accountIndex][customerColumn] || "customer")
+  });
+
+  appendTransactionIfSheetExists_(tenantId, {
+    transaction_id: "txn-" + token_().slice(0, 10),
+    account_id: accountId,
+    type: actionLabel,
+    amount: Math.abs(delta),
+    direction: delta < 0 ? "OUT" : "IN",
+    memo: actionLabel + " via web terminal"
+  });
+}
+
+function updateAccountStatus_(tenantId, actorName, accountId, nextStatus) {
+  if (!accountId) {
+    throw new Error("Missing account id.");
+  }
+
+  var context = getSheetContext_(SHEETS.accounts);
+  var accountIndex = findRowById_(context, "account_id", accountId, tenantId);
+  if (accountIndex === -1) {
+    throw new Error("Account not found.");
+  }
+
+  var statusColumn = requireHeaderIndex_(context.headers, "status", SHEETS.accounts);
+  context.sheet.getRange(accountIndex + 2, statusColumn + 1).setValue(nextStatus);
+
+  appendAuditLog_(tenantId, {
+    actor_name: actorName,
+    object_type: "account",
+    object_id: accountId,
+    target_account_id: accountId,
+    action: nextStatus === "ACTIVE" ? "account_unfreeze" : "account_freeze",
+    status: "approved",
+    amount: "",
+    memo: "Status changed to " + nextStatus + " via web terminal"
   });
 }
 
@@ -608,6 +697,21 @@ function findIncidentRowIndex_(context, tenantId, incidentId) {
       return i;
     }
   }
+  return -1;
+}
+
+function findRowById_(context, headerName, id, tenantId) {
+  var idColumn = requireHeaderIndex_(context.headers, headerName, context.sheet.getName());
+  var tenantColumn = context.headers.indexOf("tenant_id");
+
+  for (var i = 0; i < context.rows.length; i += 1) {
+    var rowId = String(context.rows[i][idColumn] || "").trim();
+    var rowTenantId = tenantColumn === -1 ? "" : String(context.rows[i][tenantColumn] || "").trim();
+    if (rowId === String(id).trim() && (!tenantId || tenantColumn === -1 || rowTenantId === String(tenantId).trim())) {
+      return i;
+    }
+  }
+
   return -1;
 }
 

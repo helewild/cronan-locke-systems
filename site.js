@@ -229,12 +229,21 @@ function renderTable(view) {
     ];
   } else if (view === "accounts") {
     title.textContent = "Accounts";
-    columns = ["Account ID", "Customer", "Balance", "Status"];
+    columns = ["Account ID", "Customer", "Balance", "Status", "Actions"];
     rows = (store.accounts || []).map((account) => [
       account.account_id,
       account.customer_name,
       { money: account.balance },
-      { chip: account.status, tone: account.status === "ACTIVE" ? "" : "dim" }
+      { chip: account.status, tone: account.status === "ACTIVE" ? "" : "dim" },
+      {
+        actions: [
+          { label: "Deposit", kind: "deposit", accountId: account.account_id },
+          { label: "Withdraw", kind: "withdraw", accountId: account.account_id },
+          account.status === "ACTIVE"
+            ? { label: "Freeze", kind: "freeze", accountId: account.account_id, tone: "danger" }
+            : { label: "Unfreeze", kind: "unfreeze", accountId: account.account_id }
+        ]
+      }
     ]);
   } else if (view === "transactions") {
     title.textContent = "Transactions";
@@ -296,6 +305,11 @@ function renderTable(view) {
     }
     if (cell && typeof cell === "object" && "chip" in cell) {
       return `<td><span class="chip ${cell.tone || ""}">${cell.chip}</span></td>`;
+    }
+    if (cell && typeof cell === "object" && "actions" in cell) {
+      return `<td><div class="row-actions">${cell.actions.map((action) =>
+        `<button class="row-action ${action.tone || ""}" type="button" data-row-action="${action.kind}" data-account-id="${action.accountId}">${action.label}</button>`
+      ).join("")}</div></td>`;
     }
     return `<td>${cell}</td>`;
   }).join("") + "</tr>").join("");
@@ -382,6 +396,53 @@ async function runAdminAction(actionType, extras = {}) {
   };
 
   return bridgeRequest("admin_action", payload);
+}
+
+async function runAccountAction(kind, accountId) {
+  if (!accountId) {
+    addLog("Missing account id for action.");
+    return;
+  }
+
+  if (kind === "deposit" || kind === "withdraw") {
+    const raw = window.prompt(`Enter ${kind} amount in Linden dollars:`, "100");
+    if (raw === null) {
+      return;
+    }
+    const amount = Number(raw);
+    if (!amount || amount < 1) {
+      addLog("Amount must be greater than zero.");
+      return;
+    }
+
+    const result = await runAdminAction(kind === "deposit" ? "deposit_account" : "withdraw_account", {
+      account_id: accountId,
+      amount
+    });
+
+    if (!result.ok) {
+      addLog(result.error || `${kind} failed.`);
+      return;
+    }
+
+    applyStore(result.store);
+    addLog(result.message || `${kind} applied to ${accountId}.`);
+    return;
+  }
+
+  if (kind === "freeze" || kind === "unfreeze") {
+    const result = await runAdminAction(kind === "freeze" ? "freeze_account" : "unfreeze_account", {
+      account_id: accountId
+    });
+
+    if (!result.ok) {
+      addLog(result.error || `${kind} failed.`);
+      return;
+    }
+
+    applyStore(result.store);
+    addLog(result.message || `${kind} applied to ${accountId}.`);
+  }
 }
 
 function demoRequest(action, payload) {
@@ -511,6 +572,14 @@ function wireAuth() {
 }
 
 function wireAdminActions() {
+  document.getElementById("table-body").addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-row-action]");
+    if (!button) {
+      return;
+    }
+    await runAccountAction(button.dataset.rowAction, button.dataset.accountId);
+  });
+
   document.getElementById("dispatch-btn").addEventListener("click", async () => {
     if (!state.incident) {
       addLog("No active incident loaded for dispatch.");
