@@ -499,6 +499,7 @@ function wireAuth() {
 function wireAdminActions() {
   document.getElementById("dispatch-btn").addEventListener("click", async () => {
     if (!state.incident) {
+      addLog("No active incident loaded for dispatch.");
       return;
     }
     const result = await runAdminAction("dispatch_police", {
@@ -514,6 +515,7 @@ function wireAdminActions() {
 
   document.getElementById("lock-btn").addEventListener("click", async () => {
     if (!state.incident) {
+      addLog("No active incident loaded for vault lockdown.");
       return;
     }
     const result = await runAdminAction("lock_vault", {
