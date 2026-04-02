@@ -479,7 +479,8 @@ function renderTable(view) {
               : null,
             tenant.status === "ACTIVE"
               ? { label: "Suspend", kind: "suspend-tenant", tenantId: tenant.tenant_id, tone: "danger", permission: "suspend_tenant" }
-              : { label: "Activate", kind: "activate-tenant", tenantId: tenant.tenant_id, permission: "activate_tenant" }
+              : { label: "Activate", kind: "activate-tenant", tenantId: tenant.tenant_id, permission: "activate_tenant" },
+            { label: "Delete", kind: "delete-tenant", tenantId: tenant.tenant_id, tone: "danger", permission: "delete_tenant" }
           ].filter(Boolean)
         }
       ]);
@@ -1020,8 +1021,17 @@ async function runTenantAction(kind, tenantId) {
   const mapping = {
     "suspend-tenant": "suspend_tenant",
     "activate-tenant": "activate_tenant",
-    "reissue-code": "reissue_activation_code"
+    "reissue-code": "reissue_activation_code",
+    "delete-tenant": "delete_tenant"
   };
+
+  if (kind === "delete-tenant") {
+    const confirmed = window.confirm(`Delete tenant ${tenantId}? This permanently removes its users, accounts, cards, incidents, audit logs, licenses, and other linked data.`);
+    if (!confirmed) {
+      addLog(`Delete canceled for ${tenantId}.`);
+      return;
+    }
+  }
 
   const result = await runAdminAction(mapping[kind], {
     target_tenant_id: tenantId
@@ -1186,7 +1196,7 @@ function wireAdminActions() {
       await runStaffAction(kind, button.dataset.userId);
       return;
     }
-    if (["edit-tenant", "suspend-tenant", "activate-tenant"].includes(kind)) {
+    if (["edit-tenant", "suspend-tenant", "activate-tenant", "reissue-code", "delete-tenant"].includes(kind)) {
       await runTenantAction(kind, button.dataset.tenantId);
       return;
     }

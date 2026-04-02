@@ -47,6 +47,7 @@ const ROLE_PERMISSIONS = {
     "view_audit_logs",
     "manage_tenant",
     "create_tenant",
+    "delete_tenant",
     "suspend_tenant",
     "activate_tenant",
     "reissue_activation_code",
@@ -706,6 +707,49 @@ function createTenant(store, actorName, payload) {
   return { tenantId, activationCode, licenseId };
 }
 
+function deleteTenant(store, actorName, targetTenantId) {
+  const tenant = findTenant(store, targetTenantId);
+  if (!tenant) {
+    throw new Error("Tenant not found.");
+  }
+  if (targetTenantId === "platform-root") {
+    throw new Error("Platform root tenant cannot be deleted.");
+  }
+
+  const accountIds = new Set(
+    (store.accounts || [])
+      .filter((account) => account.tenant_id === targetTenantId)
+      .map((account) => account.account_id)
+  );
+
+  store.cards = (store.cards || []).filter((card) => !accountIds.has(card.account_id));
+  store.fines = (store.fines || []).filter((fine) => !accountIds.has(fine.account_id));
+  store.loans = (store.loans || []).filter((loan) => !accountIds.has(loan.account_id));
+  store.transactions = (store.transactions || []).filter((transaction) => !accountIds.has(transaction.account_id));
+  store.accounts = (store.accounts || []).filter((account) => account.tenant_id !== targetTenantId);
+  store.players = (store.players || []).filter((player) => player.tenant_id !== targetTenantId);
+  store.users = (store.users || []).filter((item) => item.tenant_id !== targetTenantId);
+  store.vault_incidents = (store.vault_incidents || []).filter((incident) => incident.tenant_id !== targetTenantId);
+  store.audit_logs = (store.audit_logs || []).filter((entry) => entry.tenant_id !== targetTenantId);
+  store.atms = (store.atms || []).filter((atm) => atm.tenant_id !== targetTenantId);
+  store.branches = (store.branches || []).filter((branch) => branch.tenant_id !== targetTenantId);
+  store.regions = (store.regions || []).filter((region) => region.tenant_id !== targetTenantId);
+  store.licenses = (store.licenses || []).filter((license) => license.tenant_id !== targetTenantId);
+  store.tenants = (store.tenants || []).filter((item) => item.tenant_id !== targetTenantId);
+
+  appendPortalAudit(
+    store,
+    actorName,
+    "platform-root",
+    "tenant",
+    targetTenantId,
+    null,
+    "tenant_delete",
+    0,
+    "Tenant deleted from platform console"
+  );
+}
+
 async function registerTenantBox(store, payload) {
   if (config.setupBoxSecret && String(payload.setup_secret || "").trim() !== String(config.setupBoxSecret).trim()) {
     throw new Error("Invalid setup box secret.");
@@ -1014,6 +1058,10 @@ async function adminAction(store, payload) {
     case "create_tenant":
       requirePermission(user, "create_tenant");
       createTenant(store, actorName, payload);
+      break;
+    case "delete_tenant":
+      requirePermission(user, "delete_tenant");
+      deleteTenant(store, actorName, payload.target_tenant_id);
       break;
     case "suspend_tenant":
       requirePermission(user, "suspend_tenant");
