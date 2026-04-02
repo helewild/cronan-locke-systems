@@ -4,7 +4,7 @@ import { sendJson } from "../lib/sendJson.js";
 
 export async function handleIncidentAction(req, res) {
   let body;
-  const incidents = getCollection("vault_incidents");
+  const incidents = await getCollection("vault_incidents");
 
   try {
     body = await readBody(req);
@@ -61,7 +61,7 @@ export async function handleIncidentAction(req, res) {
     return;
   }
 
-  const updated = replaceIncident(incidentId, updates);
+  const updated = await replaceIncident(incidentId, updates);
 
   sendJson(res, 200, {
     ok: true,

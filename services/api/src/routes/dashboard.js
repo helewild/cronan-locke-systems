@@ -1,13 +1,15 @@
 import { getCollection } from "../data/store.js";
 import { sendJson } from "../lib/sendJson.js";
 
-export function handleDashboard(_req, res) {
-  const tenants = getCollection("tenants");
-  const accounts = getCollection("accounts");
-  const cards = getCollection("cards");
-  const incidents = getCollection("vault_incidents");
-  const fines = getCollection("fines");
-  const loans = getCollection("loans");
+export async function handleDashboard(_req, res) {
+  const [tenants, accounts, cards, incidents, fines, loans] = await Promise.all([
+    getCollection("tenants"),
+    getCollection("accounts"),
+    getCollection("cards"),
+    getCollection("vault_incidents"),
+    getCollection("fines"),
+    getCollection("loans")
+  ]);
 
   sendJson(res, 200, {
     ok: true,

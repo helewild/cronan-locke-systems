@@ -14,55 +14,55 @@ import { handleTenantSummary } from "./routes/tenant.js";
 import { handleTenants } from "./routes/tenants.js";
 import { sendJson } from "./lib/sendJson.js";
 
-const server = http.createServer((req, res) => {
+const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
 
   if (req.method === "GET" && url.pathname === "/health") {
-    return handleHealth(req, res);
+    return await handleHealth(req, res);
   }
 
   if (req.method === "GET" && url.pathname === "/api/v1/tenant") {
-    return handleTenantSummary(req, res);
+    return await handleTenantSummary(req, res);
   }
 
   if (req.method === "GET" && url.pathname === "/api/v1/tenants") {
-    return handleTenants(req, res);
+    return await handleTenants(req, res);
   }
 
   if (req.method === "GET" && url.pathname === "/api/v1/dashboard") {
-    return handleDashboard(req, res);
+    return await handleDashboard(req, res);
   }
 
   if (req.method === "GET" && url.pathname === "/api/v1/accounts") {
-    return handleAccounts(req, res);
+    return await handleAccounts(req, res);
   }
 
   if (req.method === "GET" && url.pathname === "/api/v1/cards") {
-    return handleCards(req, res);
+    return await handleCards(req, res);
   }
 
   if (req.method === "GET" && url.pathname === "/api/v1/transactions") {
-    return handleTransactions(req, res);
+    return await handleTransactions(req, res);
   }
 
   if (req.method === "GET" && url.pathname === "/api/v1/incidents") {
-    return handleIncidents(req, res);
+    return await handleIncidents(req, res);
   }
 
   if (req.method === "GET" && url.pathname === "/api/v1/audit-logs") {
-    return handleAuditLogs(req, res);
+    return await handleAuditLogs(req, res);
   }
 
   if (req.method === "POST" && url.pathname === "/api/v1/incidents/action") {
-    return handleIncidentAction(req, res);
+    return await handleIncidentAction(req, res);
   }
 
   if (req.method === "POST" && url.pathname === "/api/v1/actions") {
-    return handleActionRequest(req, res);
+    return await handleActionRequest(req, res);
   }
 
   if (req.method === "POST" && url.pathname === "/api/v1/portal") {
-    return handlePortal(req, res);
+    return await handlePortal(req, res);
   }
 
   return sendJson(res, 404, {

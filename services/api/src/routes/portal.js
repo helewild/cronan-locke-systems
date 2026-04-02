@@ -115,7 +115,7 @@ function appendPortalAudit(store, actorName, tenantId, objectType, objectId, tar
   });
 }
 
-function login(store, payload) {
+async function login(store, payload) {
   ensureUsers(store);
   const user = store.users.find((item) =>
     String(item.username || "").trim() === String(payload.username || "").trim()
@@ -129,7 +129,7 @@ function login(store, payload) {
 
   user.session_token = createToken();
   user.session_expires_at = new Date(Date.now() + (12 * 60 * 60 * 1000)).toISOString();
-  writeStore(store);
+  await writeStore(store);
 
   return {
     ok: true,
@@ -143,7 +143,7 @@ function login(store, payload) {
   };
 }
 
-function activateOwner(store, payload) {
+async function activateOwner(store, payload) {
   ensureUsers(store);
   const tenant = (store.tenants || []).find((item) => item.activation_code === payload.activation_code);
 
@@ -172,7 +172,7 @@ function activateOwner(store, payload) {
   tenant.owner_avatar_name = payload.avatar_name || tenant.owner_avatar_name || "";
 
   appendPortalAudit(store, payload.avatar_name || payload.username, tenant.tenant_id, "website", "owner-activation", null, "owner_activate", 0, "Owner account created");
-  writeStore(store);
+  await writeStore(store);
 
   return {
     ok: true,
@@ -387,7 +387,7 @@ function payLoan(store, tenantId, actorName, loanId, amountInput) {
   appendPortalAudit(store, actorName, tenantId, "loan", loan.loan_id, account.account_id, "loan_pay", amount, "Loan payment from admin terminal");
 }
 
-function adminAction(store, payload) {
+async function adminAction(store, payload) {
   const user = requireSession(store, payload);
   const actorName = payload.actor_name || user.username;
 
@@ -438,7 +438,7 @@ function adminAction(store, payload) {
       return { ok: false, error: "Unsupported admin action." };
   }
 
-  writeStore(store);
+  await writeStore(store);
   return {
     ok: true,
     message: "Action completed.",
@@ -460,15 +460,15 @@ export async function handlePortal(req, res) {
   }
 
   const action = body.action;
-  const store = getStore();
+  const store = await getStore();
   let result;
 
   if (action === "health") {
     result = { ok: true, status: "online" };
   } else if (action === "login") {
-    result = login(store, body);
+    result = await login(store, body);
   } else if (action === "activate_owner") {
-    result = activateOwner(store, body);
+    result = await activateOwner(store, body);
   } else if (action === "dashboard") {
     try {
       result = dashboard(store, body);
@@ -477,7 +477,7 @@ export async function handlePortal(req, res) {
     }
   } else if (action === "admin_action") {
     try {
-      result = adminAction(store, body);
+      result = await adminAction(store, body);
     } catch (error) {
       result = { ok: false, error: error.message };
     }

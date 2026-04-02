@@ -1,10 +1,12 @@
 import { getCollection } from "../data/store.js";
 import { sendJson } from "../lib/sendJson.js";
 
-export function handleTenantSummary(_req, res) {
-  const tenants = getCollection("tenants");
-  const regions = getCollection("regions");
-  const branches = getCollection("branches");
+export async function handleTenantSummary(_req, res) {
+  const [tenants, regions, branches] = await Promise.all([
+    getCollection("tenants"),
+    getCollection("regions"),
+    getCollection("branches")
+  ]);
 
   sendJson(res, 200, {
     ok: true,

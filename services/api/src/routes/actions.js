@@ -343,7 +343,7 @@ export async function handleActionRequest(req, res) {
   }
 
   const action = body.action;
-  const store = getStore();
+  const store = await getStore();
   const handler = handlers[action];
 
   if (!action || !handler) {
@@ -359,6 +359,6 @@ export async function handleActionRequest(req, res) {
     return;
   }
 
-  writeStore(store);
+  await writeStore(store);
   sendJson(res, 200, result.body);
 }
