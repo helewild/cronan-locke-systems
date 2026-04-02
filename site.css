@@ -70,7 +70,7 @@ body { padding: 10px; }
 .admin-shell { display: grid; gap: 10px; }
 
 .auth-shell {
-  min-height: 860px;
+  min-height: calc(100vh - 42px);
   place-items: center;
   padding: 12px;
 }
@@ -149,6 +149,7 @@ body { padding: 10px; }
 
 .auth-main {
   width: min(100%, 520px);
+  align-self: center;
 }
 .main { grid-template-rows: auto auto auto 1fr auto; }
 
