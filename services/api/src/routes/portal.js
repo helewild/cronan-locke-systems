@@ -32,9 +32,21 @@ function getTenantAccountIds(store, tenantId) {
 function buildTenantStore(store, tenantId) {
   const accountIds = new Set(getTenantAccountIds(store, tenantId));
   const accounts = (store.accounts || []).filter((item) => item.tenant_id === tenantId);
+  const users = (store.users || [])
+    .filter((item) => item.tenant_id === tenantId)
+    .map((item) => ({
+      user_id: item.user_id,
+      tenant_id: item.tenant_id,
+      username: item.username,
+      role: item.role,
+      avatar_name: item.avatar_name,
+      status: item.status,
+      must_reset_password: item.must_reset_password
+    }));
 
   return {
     tenants: (store.tenants || []).filter((item) => item.tenant_id === tenantId),
+    users,
     accounts,
     cards: (store.cards || []).filter((item) => accountIds.has(item.account_id)),
     fines: (store.fines || []).filter((item) => accountIds.has(item.account_id)),
@@ -77,6 +89,12 @@ function requireSession(store, payload) {
   return user;
 }
 
+function requireOwner(user) {
+  if (String(user.role || "").trim() !== "tenant_owner") {
+    throw new Error("Tenant owner permission required.");
+  }
+}
+
 function findAccount(store, tenantId, accountId) {
   return (store.accounts || []).find((account) => account.tenant_id === tenantId && account.account_id === accountId) || null;
 }
@@ -98,6 +116,10 @@ function findFine(store, tenantId, fineId) {
 function findLoan(store, tenantId, loanId) {
   const accountIds = new Set(getTenantAccountIds(store, tenantId));
   return (store.loans || []).find((loan) => accountIds.has(loan.account_id) && loan.loan_id === loanId) || null;
+}
+
+function findUserById(store, tenantId, userId) {
+  return (store.users || []).find((item) => item.tenant_id === tenantId && item.user_id === userId) || null;
 }
 
 function appendPortalAudit(store, actorName, tenantId, objectType, objectId, targetAccountId, action, amount, memo) {
@@ -387,6 +409,66 @@ function payLoan(store, tenantId, actorName, loanId, amountInput) {
   appendPortalAudit(store, actorName, tenantId, "loan", loan.loan_id, account.account_id, "loan_pay", amount, "Loan payment from admin terminal");
 }
 
+function createStaffUser(store, tenantId, actorName, payload) {
+  const username = String(payload.new_username || "").trim();
+  const avatarName = String(payload.new_avatar_name || "").trim();
+  const role = String(payload.new_role || "").trim() || "bank_admin";
+  const password = String(payload.new_password || "");
+
+  if (!username || !avatarName || !password) {
+    throw new Error("Username, avatar name, and password are required.");
+  }
+  if ((store.users || []).some((item) => String(item.username || "").trim().toLowerCase() === username.toLowerCase())) {
+    throw new Error("Username already exists.");
+  }
+
+  const nextNumber = (store.users || []).length + 10001;
+  const user = {
+    user_id: "USR-" + String(nextNumber),
+    tenant_id: tenantId,
+    username,
+    password_hash: hashPassword(password),
+    role,
+    avatar_name: avatarName,
+    status: "ACTIVE",
+    session_token: "",
+    session_expires_at: "",
+    must_reset_password: true
+  };
+
+  store.users.push(user);
+  appendPortalAudit(store, actorName, tenantId, "user", user.user_id, null, "staff_user_create", 0, "Created " + role + " user " + username);
+}
+
+function updateStaffStatus(store, tenantId, actorName, userId, nextStatus) {
+  const user = findUserById(store, tenantId, userId);
+  if (!user) {
+    throw new Error("Staff user not found.");
+  }
+  if (user.role === "tenant_owner") {
+    throw new Error("Tenant owner account cannot be disabled.");
+  }
+
+  user.status = nextStatus;
+  if (nextStatus !== "ACTIVE") {
+    user.session_token = "";
+    user.session_expires_at = "";
+  }
+
+  appendPortalAudit(store, actorName, tenantId, "user", user.user_id, null, nextStatus === "ACTIVE" ? "staff_user_enable" : "staff_user_disable", 0, "Staff user status changed to " + nextStatus);
+}
+
+function resetStaffSession(store, tenantId, actorName, userId) {
+  const user = findUserById(store, tenantId, userId);
+  if (!user) {
+    throw new Error("Staff user not found.");
+  }
+
+  user.session_token = "";
+  user.session_expires_at = "";
+  appendPortalAudit(store, actorName, tenantId, "user", user.user_id, null, "staff_user_session_reset", 0, "Staff session cleared");
+}
+
 async function adminAction(store, payload) {
   const user = requireSession(store, payload);
   const actorName = payload.actor_name || user.username;
@@ -406,6 +488,22 @@ async function adminAction(store, payload) {
       break;
     case "manage_tenant":
       appendPortalAudit(store, actorName, user.tenant_id, "website", "tenant-console", null, "tenant_manage_open", 0, "Tenant management opened");
+      break;
+    case "create_staff_user":
+      requireOwner(user);
+      createStaffUser(store, user.tenant_id, actorName, payload);
+      break;
+    case "disable_staff_user":
+      requireOwner(user);
+      updateStaffStatus(store, user.tenant_id, actorName, payload.user_id, "DISABLED");
+      break;
+    case "enable_staff_user":
+      requireOwner(user);
+      updateStaffStatus(store, user.tenant_id, actorName, payload.user_id, "ACTIVE");
+      break;
+    case "reset_staff_session":
+      requireOwner(user);
+      resetStaffSession(store, user.tenant_id, actorName, payload.user_id);
       break;
     case "deposit_account":
       updateAccountBalance(store, user.tenant_id, actorName, payload.account_id, Number(payload.amount || 0), "DEPOSIT");

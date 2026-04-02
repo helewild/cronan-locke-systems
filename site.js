@@ -150,6 +150,12 @@ function renderMetrics() {
   document.getElementById("metric-loans").textContent = safeArray(store.loans).filter((item) => item.status === "ACTIVE").length;
 }
 
+function prettyRole(value) {
+  return String(value || "")
+    .replaceAll("_", " ")
+    .toUpperCase();
+}
+
 function updateSystemStatus() {
   const atmOffline = state.atmNetwork.filter((atm) => atm.status !== "ONLINE").length;
   const incidentActive = state.incident && state.incident.state === "ACTIVE";
@@ -242,6 +248,23 @@ function renderTable(view) {
           account.status === "ACTIVE"
             ? { label: "Freeze", kind: "freeze", accountId: account.account_id, tone: "danger" }
             : { label: "Unfreeze", kind: "unfreeze", accountId: account.account_id }
+        ]
+      }
+    ]);
+  } else if (view === "staff") {
+    title.textContent = "Staff Users";
+    columns = ["Username", "Avatar", "Role", "Status", "Actions"];
+    rows = safeArray(store.users).map((staffUser) => [
+      staffUser.username,
+      staffUser.avatar_name || "-",
+      prettyRole(staffUser.role),
+      { chip: staffUser.status, tone: staffUser.status === "ACTIVE" ? "" : "alert" },
+      {
+        actions: [
+          { label: "Reset Session", kind: "reset-staff-session", userId: staffUser.user_id },
+          staffUser.status === "ACTIVE"
+            ? { label: "Disable", kind: "disable-staff", userId: staffUser.user_id, tone: "danger" }
+            : { label: "Enable", kind: "enable-staff", userId: staffUser.user_id }
         ]
       }
     ]);
@@ -352,7 +375,7 @@ function renderTable(view) {
     }
     if (cell && typeof cell === "object" && "actions" in cell) {
       return `<td><div class="row-actions">${cell.actions.length ? cell.actions.map((action) =>
-        `<button class="row-action ${action.tone || ""}" type="button" data-row-action="${action.kind}" data-account-id="${action.accountId || ""}" data-card-id="${action.cardId || ""}" data-fine-id="${action.fineId || ""}" data-loan-id="${action.loanId || ""}">${action.label}</button>`
+        `<button class="row-action ${action.tone || ""}" type="button" data-row-action="${action.kind}" data-account-id="${action.accountId || ""}" data-card-id="${action.cardId || ""}" data-fine-id="${action.fineId || ""}" data-loan-id="${action.loanId || ""}" data-user-id="${action.userId || ""}">${action.label}</button>`
       ).join("") : '<span class="dim-copy">No actions</span>'}</div></td>`;
     }
     return `<td>${cell}</td>`;
@@ -556,6 +579,28 @@ async function runLoanAction(loanId) {
   addLog(result.message || `Loan payment applied to ${loanId}.`);
 }
 
+async function runStaffAction(kind, userId) {
+  if (!userId) {
+    addLog("Missing user id for staff action.");
+    return;
+  }
+
+  const mapping = {
+    "disable-staff": "disable_staff_user",
+    "enable-staff": "enable_staff_user",
+    "reset-staff-session": "reset_staff_session"
+  };
+
+  const result = await runAdminAction(mapping[kind], { user_id: userId });
+  if (!result.ok) {
+    addLog(result.error || `${kind} failed.`);
+    return;
+  }
+
+  applyStore(result.store);
+  addLog(result.message || `${kind} applied to ${userId}.`);
+}
+
 function demoRequest(action, payload) {
   if (action === "login") {
     const setupUser = state.setupUsers[payload.username];
@@ -693,6 +738,10 @@ function wireAdminActions() {
       await runAccountAction(kind, button.dataset.accountId);
       return;
     }
+    if (["disable-staff", "enable-staff", "reset-staff-session"].includes(kind)) {
+      await runStaffAction(kind, button.dataset.userId);
+      return;
+    }
     if (["lock-card", "unlock-card", "report-stolen-card"].includes(kind)) {
       await runCardAction(kind, button.dataset.cardId);
       return;
@@ -760,6 +809,31 @@ function wireAdminActions() {
   });
 
   document.getElementById("manage-tenant-btn").addEventListener("click", async () => {
+    const username = window.prompt("Create staff username, or leave blank to just open tenant management:", "");
+    if (username && username.trim()) {
+      const avatarName = window.prompt("Staff avatar or display name:", username.trim());
+      const role = window.prompt("Staff role (bank_admin, teller, security_admin):", "bank_admin");
+      const password = window.prompt("Temporary password for this staff user:", "changeme123");
+      if (!avatarName || !role || !password) {
+        addLog("Staff creation canceled.");
+        return;
+      }
+
+      const result = await runAdminAction("create_staff_user", {
+        new_username: username.trim(),
+        new_avatar_name: avatarName.trim(),
+        new_role: role.trim(),
+        new_password: password
+      });
+      if (!result.ok) {
+        addLog(result.error || "Staff creation failed.");
+        return;
+      }
+      applyStore(result.store);
+      addLog(result.message || `Staff user ${username.trim()} created.`);
+      return;
+    }
+
     const result = await runAdminAction("manage_tenant");
     if (!result.ok) {
       addLog(result.error || "Tenant management request failed.");
