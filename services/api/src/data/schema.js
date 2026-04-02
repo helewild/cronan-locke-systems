@@ -44,6 +44,27 @@ export const STORE_TABLES = [
     }
   },
   {
+    key: "licenses",
+    table: "licenses",
+    columns: [
+      "license_id",
+      "tenant_id",
+      "status",
+      "buyer_avatar_name",
+      "buyer_avatar_key",
+      "marketplace_order_id",
+      "issued_at",
+      "source"
+    ],
+    defaults: {
+      buyer_avatar_name: "",
+      buyer_avatar_key: "",
+      marketplace_order_id: "",
+      issued_at: "",
+      source: "manual"
+    }
+  },
+  {
     key: "regions",
     table: "regions",
     columns: ["region_id", "tenant_id", "name", "status"]
@@ -188,6 +209,16 @@ export const CREATE_TABLE_STATEMENTS = [
     session_token TEXT,
     session_expires_at TIMESTAMPTZ,
     must_reset_password BOOLEAN NOT NULL DEFAULT FALSE
+  )`,
+  `CREATE TABLE IF NOT EXISTS licenses (
+    license_id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    status TEXT NOT NULL,
+    buyer_avatar_name TEXT,
+    buyer_avatar_key TEXT,
+    marketplace_order_id TEXT,
+    issued_at TIMESTAMPTZ,
+    source TEXT
   )`,
   `CREATE TABLE IF NOT EXISTS regions (
     region_id TEXT PRIMARY KEY,

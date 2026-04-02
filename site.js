@@ -262,6 +262,43 @@ function getTransactions(store) {
   }));
 }
 
+function getLicenseForTenant(store, tenantId) {
+  return safeArray(store.licenses).find((license) => license.tenant_id === tenantId) || null;
+}
+
+function getTenantHealth(store, tenantId) {
+  const tenant = safeArray(store.tenants).find((item) => item.tenant_id === tenantId);
+  if (!tenant) {
+    return { label: "UNKNOWN", tone: "alert" };
+  }
+  if (tenant.status !== "ACTIVE") {
+    return { label: "SUSPENDED", tone: "alert" };
+  }
+
+  const incidents = safeArray(store.vault_incidents).filter((item) => item.tenant_id === tenantId && item.state === "ACTIVE");
+  if (incidents.length) {
+    return { label: "ALERT", tone: "alert" };
+  }
+
+  const offlineAtms = safeArray(store.atms).filter((item) => item.tenant_id === tenantId && item.status !== "ONLINE");
+  if (offlineAtms.length) {
+    return { label: "DEGRADED", tone: "dim" };
+  }
+
+  return { label: "NOMINAL", tone: "" };
+}
+
+function getTenantActivity(store, tenantId) {
+  const audit = safeArray(store.audit_logs).filter((item) => item.tenant_id === tenantId);
+  if (!audit.length) {
+    const tenant = safeArray(store.tenants).find((item) => item.tenant_id === tenantId);
+    return tenant?.created_at ? `Tenant created ${String(tenant.created_at).slice(0, 10)}` : "No recent activity";
+  }
+
+  const latest = audit[audit.length - 1];
+  return `${String(latest.action || "activity").replaceAll("_", " ")} / ${latest.actor_name || latest.object_type || "system"}`.toUpperCase();
+}
+
 function ensureSelectedAccount(store) {
   const accounts = safeArray(store.accounts);
   if (!accounts.length) {
@@ -361,7 +398,7 @@ function renderTable(view) {
 
   if (view === "platform") {
     title.textContent = "Platform";
-    columns = ["Tenant ID", "Tenant", "Bank", "Owner", "Status", "Actions"];
+    columns = ["Tenant ID", "Tenant", "License", "Health", "Owner", "Last Activity", "Actions"];
     rows = safeArray(store.tenants)
       .filter((tenant) => matchesSearch([
         tenant.tenant_id,
@@ -370,14 +407,23 @@ function renderTable(view) {
         tenant.status,
         tenant.primary_region_name || "",
         tenant.owner_username || "",
-        tenant.activation_code || ""
+        tenant.activation_code || "",
+        getLicenseForTenant(store, tenant.tenant_id)?.status || "",
+        getTenantActivity(store, tenant.tenant_id)
       ]))
       .map((tenant) => [
         tenant.tenant_id,
-        tenant.name,
-        tenant.bank_name,
+        `${tenant.name}<br><span class="dim-copy">${tenant.bank_name}</span>`,
+        (() => {
+          const license = getLicenseForTenant(store, tenant.tenant_id);
+          return { chip: license?.status || "UNLICENSED", tone: license?.status === "ACTIVE" ? "" : "dim" };
+        })(),
+        (() => {
+          const health = getTenantHealth(store, tenant.tenant_id);
+          return { chip: health.label, tone: health.tone };
+        })(),
         tenant.owner_username ? tenant.owner_username : ("Activation: " + (tenant.activation_code || "PENDING")),
-        { chip: tenant.status, tone: tenant.status === "ACTIVE" ? "" : "alert" },
+        getTenantActivity(store, tenant.tenant_id),
         {
           actions: [
             { label: "Edit", kind: "edit-tenant", tenantId: tenant.tenant_id, permission: "manage_tenant" },

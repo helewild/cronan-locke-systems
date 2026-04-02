@@ -23,6 +23,12 @@ function ensureUsers(store) {
   }
 }
 
+function ensureLicenses(store) {
+  if (!Array.isArray(store.licenses)) {
+    store.licenses = [];
+  }
+}
+
 const ROLE_PERMISSIONS = {
   platform_admin: [
     "view_platform",
@@ -166,6 +172,7 @@ function buildTenantStore(store, tenantId) {
         status: item.status,
         must_reset_password: item.must_reset_password
       })),
+      licenses: (store.licenses || []).map((item) => ({ ...item })),
       players: (store.players || []).map((item) => ({ ...item })),
       accounts: (store.accounts || []).map((item) => ({ ...item })),
       cards: (store.cards || []).map((item) => ({ ...item })),
@@ -197,6 +204,7 @@ function buildTenantStore(store, tenantId) {
   return {
     tenants: (store.tenants || []).filter((item) => item.tenant_id === tenantId),
     users,
+    licenses: (store.licenses || []).filter((item) => item.tenant_id === tenantId),
     accounts,
     cards: (store.cards || []).filter((item) => accountIds.has(item.account_id)),
     fines: (store.fines || []).filter((item) => accountIds.has(item.account_id)),
@@ -299,6 +307,14 @@ function nextTenantId(store) {
   return "tenant-" + String(next);
 }
 
+function nextLicenseId(store) {
+  const numeric = (store.licenses || [])
+    .map((item) => Number(String(item.license_id || "").replace("LIC-", "")))
+    .filter((value) => Number.isFinite(value));
+  const next = (numeric.length ? Math.max(...numeric) : 10000) + 1;
+  return "LIC-" + String(next);
+}
+
 function appendPortalAudit(store, actorName, tenantId, objectType, objectId, targetAccountId, action, amount, memo) {
   createAuditEntry(store, {
     tenant_id: tenantId,
@@ -346,6 +362,7 @@ async function login(store, payload) {
 
 async function activateOwner(store, payload) {
   ensureUsers(store);
+  ensureLicenses(store);
   const tenant = (store.tenants || []).find((item) => item.activation_code === payload.activation_code);
 
   if (!tenant) {
@@ -371,6 +388,11 @@ async function activateOwner(store, payload) {
 
   tenant.owner_username = payload.username;
   tenant.owner_avatar_name = payload.avatar_name || tenant.owner_avatar_name || "";
+
+  const license = (store.licenses || []).find((item) => item.tenant_id === tenant.tenant_id);
+  if (license && !license.buyer_avatar_name) {
+    license.buyer_avatar_name = payload.avatar_name || payload.username;
+  }
 
   appendPortalAudit(store, payload.avatar_name || payload.username, tenant.tenant_id, "website", "owner-activation", null, "owner_activate", 0, "Owner account created");
   await writeStore(store);
@@ -559,10 +581,12 @@ function updateTenantSettings(store, tenantId, actorName, payload) {
 }
 
 function createTenant(store, actorName, payload) {
+  ensureLicenses(store);
   const tenantName = String(payload.tenant_name || "").trim();
   const bankName = String(payload.bank_name || "").trim();
   const regionName = String(payload.primary_region_name || "").trim();
   const payrollDefault = Number(payload.payroll_default_amount || 250);
+  const licenseStatus = String(payload.license_status || "TRIAL").trim().toUpperCase();
 
   if (!tenantName || !bankName) {
     throw new Error("Tenant and bank name are required.");
@@ -575,6 +599,7 @@ function createTenant(store, actorName, payload) {
   const regionId = tenantId + "-region";
   const branchId = tenantId + "-branch";
   const activationCode = "ACT-" + String(tenantId).replace("tenant-", "").padStart(6, "0");
+  const licenseId = nextLicenseId(store);
 
   store.tenants.push({
     tenant_id: tenantId,
@@ -593,6 +618,17 @@ function createTenant(store, actorName, payload) {
       "loans_and_credit",
       "crime_and_security"
     ]
+  });
+
+  store.licenses.push({
+    license_id: licenseId,
+    tenant_id: tenantId,
+    status: licenseStatus,
+    buyer_avatar_name: String(payload.owner_avatar_name || "").trim(),
+    buyer_avatar_key: String(payload.buyer_avatar_key || "").trim(),
+    marketplace_order_id: String(payload.marketplace_order_id || "").trim(),
+    issued_at: new Date().toISOString(),
+    source: String(payload.license_source || "platform_console").trim()
   });
 
   if (!Array.isArray(store.regions)) {
@@ -621,6 +657,31 @@ function createTenant(store, actorName, payload) {
   });
 
   appendPortalAudit(store, actorName, tenantId, "tenant", tenantId, null, "tenant_create", payrollDefault, "Tenant created from platform console");
+  return { tenantId, activationCode, licenseId };
+}
+
+async function registerTenantBox(store, payload) {
+  const actorName = String(payload.buyer_avatar_name || "Marketplace Buyer").trim() || "Marketplace Buyer";
+  const created = createTenant(store, actorName, {
+    tenant_name: payload.tenant_name || payload.buyer_avatar_name || "New Tenant",
+    bank_name: payload.bank_name || ((payload.tenant_name || payload.buyer_avatar_name || "New Tenant") + " Bank"),
+    primary_region_name: payload.primary_region_name || payload.tenant_name || payload.buyer_avatar_name || "New Region",
+    payroll_default_amount: Number(payload.payroll_default_amount || 250),
+    owner_avatar_name: payload.buyer_avatar_name || "",
+    buyer_avatar_key: payload.buyer_avatar_key || "",
+    marketplace_order_id: payload.marketplace_order_id || "",
+    license_status: "ACTIVE",
+    license_source: "setup_box"
+  });
+
+  await writeStore(store);
+  return {
+    ok: true,
+    tenant_id: created.tenantId,
+    activation_code: created.activationCode,
+    license_id: created.licenseId,
+    message: "Tenant registered from setup box."
+  };
 }
 
 function updateTenantStatus(store, actorName, targetTenantId, nextStatus) {
@@ -999,6 +1060,12 @@ export async function handlePortal(req, res) {
     result = await login(store, body);
   } else if (action === "activate_owner") {
     result = await activateOwner(store, body);
+  } else if (action === "register_tenant_box") {
+    try {
+      result = await registerTenantBox(store, body);
+    } catch (error) {
+      result = { ok: false, error: error.message };
+    }
   } else if (action === "dashboard") {
     try {
       result = dashboard(store, body);
