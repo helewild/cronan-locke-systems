@@ -465,9 +465,29 @@ function renderTable(view) {
   const body = document.getElementById("table-body");
   const foot = document.getElementById("accounts-foot");
   const title = document.getElementById("view-title");
-  const searchShell = document.getElementById("search-shell");
+  const searchInput = document.getElementById("table-search");
   let columns = [];
   let rows = [];
+
+  const searchPlaceholders = {
+    platform: "Search tenant, bank, owner, license, or activity",
+    "bank-core": "Search module, scope, health, or note",
+    accounts: "Search customer, account, balance, or status",
+    employment: "Search employee, employer, title, department, or pay rate",
+    staff: "Search username, avatar, role, or status",
+    cards: "Search card, account, state, or card number",
+    transactions: "Search type, account, amount, direction, or memo",
+    fines: "Search fine, account, reference, amount, or status",
+    loans: "Search loan, account, terms, balance, or status",
+    "vault-control": "Search vault, stage, unit, or marked cash",
+    incidents: "Search incident, actor, stage, or state",
+    payroll: "Search payroll type, account, amount, or memo",
+    "atm-network": "Search ATM, branch, status, or scope",
+    "audit-logs": "Search action, actor, target, or status"
+  };
+  if (searchInput) {
+    searchInput.placeholder = searchPlaceholders[view] || "Search records";
+  }
 
   if (view === "platform") {
     title.textContent = "Platform";
@@ -575,7 +595,6 @@ function renderTable(view) {
           { chip: employment.status, tone: employment.status === "ACTIVE" ? "" : "dim" },
           {
             actions: [
-              { label: "New Job", kind: "create-employment", permission: "create_employment" },
               { label: "Edit", kind: "edit-employment", employmentId: employment.employment_id, permission: "update_employment" },
               employment.status === "ACTIVE"
                 ? { label: "Terminate", kind: "terminate-employment", employmentId: employment.employment_id, tone: "danger", permission: "terminate_employment" }
