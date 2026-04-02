@@ -51,6 +51,10 @@ const ROLE_PERMISSIONS = {
     "suspend_tenant",
     "activate_tenant",
     "reissue_activation_code",
+    "suspend_license",
+    "activate_license",
+    "extend_license",
+    "expire_license",
     "create_staff_user",
     "disable_staff_user",
     "enable_staff_user",
@@ -175,7 +179,7 @@ function buildTenantStore(store, tenantId) {
         status: item.status,
         must_reset_password: item.must_reset_password
       })),
-      licenses: (store.licenses || []).map((item) => ({ ...item })),
+      licenses: (store.licenses || []).map((item) => withLicenseMeta(item)),
       players: (store.players || []).map((item) => ({ ...item })),
       accounts: (store.accounts || []).map((item) => ({ ...item })),
       cards: (store.cards || []).map((item) => ({ ...item })),
@@ -207,7 +211,7 @@ function buildTenantStore(store, tenantId) {
   return {
     tenants: (store.tenants || []).filter((item) => item.tenant_id === tenantId),
     users,
-    licenses: (store.licenses || []).filter((item) => item.tenant_id === tenantId),
+    licenses: (store.licenses || []).filter((item) => item.tenant_id === tenantId).map((item) => withLicenseMeta(item)),
     accounts,
     cards: (store.cards || []).filter((item) => accountIds.has(item.account_id)),
     fines: (store.fines || []).filter((item) => accountIds.has(item.account_id)),
@@ -298,6 +302,74 @@ function findLicenseBySetupBox(store, setupBoxKey) {
   return (store.licenses || []).find((item) => String(item.setup_box_key || "") === String(setupBoxKey || "")) || null;
 }
 
+function findLicenseByTenant(store, tenantId) {
+  return (store.licenses || []).find((item) => item.tenant_id === tenantId) || null;
+}
+
+function dateIsPast(value) {
+  if (!value) {
+    return false;
+  }
+  const stamp = new Date(value).getTime();
+  return Number.isFinite(stamp) && stamp <= Date.now();
+}
+
+function addDaysIso(days, startValue) {
+  const startStamp = startValue ? new Date(startValue).getTime() : Date.now();
+  const baseStamp = Number.isFinite(startStamp) ? Math.max(startStamp, Date.now()) : Date.now();
+  return new Date(baseStamp + (days * 24 * 60 * 60 * 1000)).toISOString();
+}
+
+function getEffectiveLicenseStatus(license) {
+  if (!license) {
+    return "UNLICENSED";
+  }
+
+  const rawStatus = String(license.status || "").trim().toUpperCase() || "UNLICENSED";
+  if (rawStatus === "SUSPENDED") {
+    return "SUSPENDED";
+  }
+  if (rawStatus === "EXPIRED") {
+    return "EXPIRED";
+  }
+  if (dateIsPast(license.expires_at)) {
+    return "EXPIRED";
+  }
+  return rawStatus;
+}
+
+function enforceTenantAccess(store, tenantId) {
+  const tenant = findTenant(store, tenantId);
+  if (!tenant) {
+    throw new Error("Tenant not found.");
+  }
+  if (!isActive(tenant.status)) {
+    throw new Error("Tenant access is suspended.");
+  }
+
+  const license = findLicenseByTenant(store, tenantId);
+  const effectiveStatus = getEffectiveLicenseStatus(license);
+  if (effectiveStatus === "UNLICENSED") {
+    throw new Error("Tenant license is missing.");
+  }
+  if (effectiveStatus === "SUSPENDED") {
+    throw new Error("Tenant license is suspended.");
+  }
+  if (effectiveStatus === "EXPIRED") {
+    throw new Error("Tenant license has expired.");
+  }
+}
+
+function withLicenseMeta(license) {
+  if (!license) {
+    return null;
+  }
+  return {
+    ...license,
+    effective_status: getEffectiveLicenseStatus(license)
+  };
+}
+
 function buildRegistrationResponse(store, tenantId, licenseId) {
   const tenant = findTenant(store, tenantId);
   return {
@@ -363,6 +435,10 @@ async function login(store, payload) {
 
   if (!user) {
     return { ok: false, error: "Invalid username or password." };
+  }
+
+  if (user.tenant_id !== "platform-root") {
+    enforceTenantAccess(store, user.tenant_id);
   }
 
   user.session_token = createToken();
@@ -451,6 +527,9 @@ function reissueActivationCode(store, actorName, targetTenantId) {
 
 function dashboard(store, payload) {
   const user = requireSession(store, payload);
+  if (user.tenant_id !== "platform-root") {
+    enforceTenantAccess(store, user.tenant_id);
+  }
   return {
     ok: true,
     session: {
@@ -633,6 +712,10 @@ function createTenant(store, actorName, payload) {
   const regionName = String(payload.primary_region_name || "").trim();
   const payrollDefault = Number(payload.payroll_default_amount || 250);
   const licenseStatus = String(payload.license_status || "TRIAL").trim().toUpperCase();
+  const issuedAt = new Date().toISOString();
+  const expiresAt = payload.license_expires_at
+    ? new Date(payload.license_expires_at).toISOString()
+    : (licenseStatus === "TRIAL" ? addDaysIso(14) : "");
 
   if (!tenantName || !bankName) {
     throw new Error("Tenant and bank name are required.");
@@ -674,7 +757,9 @@ function createTenant(store, actorName, payload) {
     buyer_avatar_key: String(payload.buyer_avatar_key || "").trim(),
     setup_box_key: String(payload.setup_box_key || "").trim(),
     marketplace_order_id: String(payload.marketplace_order_id || "").trim(),
-    issued_at: new Date().toISOString(),
+    issued_at: issuedAt,
+    renewed_at: issuedAt,
+    expires_at: expiresAt,
     source: String(payload.license_source || "platform_console").trim()
   });
 
@@ -796,6 +881,64 @@ function updateTenantStatus(store, actorName, targetTenantId, nextStatus) {
   appendPortalAudit(store, actorName, targetTenantId, "tenant", targetTenantId, null, nextStatus === "ACTIVE" ? "tenant_activate" : "tenant_suspend", 0, "Tenant status set to " + nextStatus);
 }
 
+function updateLicenseStatus(store, actorName, targetTenantId, nextStatus) {
+  const license = findLicenseByTenant(store, targetTenantId);
+  if (!license) {
+    throw new Error("License not found for tenant.");
+  }
+
+  license.status = nextStatus;
+  if (nextStatus === "ACTIVE") {
+    license.renewed_at = new Date().toISOString();
+    if (!license.expires_at || dateIsPast(license.expires_at)) {
+      license.expires_at = addDaysIso(30);
+    }
+  }
+  if (nextStatus === "EXPIRED") {
+    license.expires_at = new Date().toISOString();
+  }
+
+  appendPortalAudit(
+    store,
+    actorName,
+    targetTenantId,
+    "license",
+    license.license_id,
+    null,
+    "license_" + nextStatus.toLowerCase(),
+    0,
+    "License status set to " + nextStatus
+  );
+}
+
+function extendLicense(store, actorName, targetTenantId, daysInput) {
+  const license = findLicenseByTenant(store, targetTenantId);
+  if (!license) {
+    throw new Error("License not found for tenant.");
+  }
+
+  const days = Number(daysInput || 30);
+  if (!Number.isFinite(days) || days <= 0) {
+    throw new Error("Extension days must be greater than zero.");
+  }
+
+  license.status = "ACTIVE";
+  license.renewed_at = new Date().toISOString();
+  license.expires_at = addDaysIso(days, license.expires_at);
+
+  appendPortalAudit(
+    store,
+    actorName,
+    targetTenantId,
+    "license",
+    license.license_id,
+    null,
+    "license_extend",
+    days,
+    "License extended by " + days + " day(s)"
+  );
+}
+
 function updateCardState(store, tenantId, actorName, cardId, nextState, action, memo) {
   const card = findCard(store, tenantId, cardId);
   if (!card) {
@@ -880,6 +1023,9 @@ function payLoan(store, tenantId, actorName, loanId, amountInput) {
 
 async function changePassword(store, payload) {
   const user = requireSession(store, payload);
+  if (user.tenant_id !== "platform-root") {
+    enforceTenantAccess(store, user.tenant_id);
+  }
   const newPassword = String(payload.new_password || "");
 
   if (newPassword.length < 8) {
@@ -1074,6 +1220,22 @@ async function adminAction(store, payload) {
     case "reissue_activation_code":
       requirePermission(user, "reissue_activation_code");
       reissueActivationCode(store, actorName, payload.target_tenant_id);
+      break;
+    case "suspend_license":
+      requirePermission(user, "suspend_license");
+      updateLicenseStatus(store, actorName, payload.target_tenant_id, "SUSPENDED");
+      break;
+    case "activate_license":
+      requirePermission(user, "activate_license");
+      updateLicenseStatus(store, actorName, payload.target_tenant_id, "ACTIVE");
+      break;
+    case "expire_license":
+      requirePermission(user, "expire_license");
+      updateLicenseStatus(store, actorName, payload.target_tenant_id, "EXPIRED");
+      break;
+    case "extend_license":
+      requirePermission(user, "extend_license");
+      extendLicense(store, actorName, payload.target_tenant_id, payload.days);
       break;
     case "update_tenant_settings":
       requirePermission(user, "manage_tenant");

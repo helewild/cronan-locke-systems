@@ -313,6 +313,29 @@ function getLicenseForTenant(store, tenantId) {
   return safeArray(store.licenses).find((license) => license.tenant_id === tenantId) || null;
 }
 
+function getLicenseStatusInfo(license) {
+  if (!license) {
+    return { label: "UNLICENSED", tone: "alert", detail: "No license" };
+  }
+
+  const effective = String(license.effective_status || license.status || "UNLICENSED").toUpperCase();
+  let tone = "dim";
+  if (effective === "ACTIVE") {
+    tone = "";
+  } else if (effective === "TRIAL") {
+    tone = "dim";
+  } else {
+    tone = "alert";
+  }
+
+  const expiry = license.expires_at ? String(license.expires_at).slice(0, 10) : "No expiry";
+  return {
+    label: effective,
+    tone,
+    detail: expiry
+  };
+}
+
 function getTenantHealth(store, tenantId) {
   const tenant = safeArray(store.tenants).find((item) => item.tenant_id === tenantId);
   if (!tenant) {
@@ -445,7 +468,7 @@ function renderTable(view) {
 
   if (view === "platform") {
     title.textContent = "Platform";
-    columns = ["Tenant ID", "Tenant", "License", "Health", "Owner", "Last Activity", "Actions"];
+    columns = ["Tenant ID", "Tenant", "License", "Expiry", "Health", "Owner", "Last Activity", "Actions"];
     rows = safeArray(store.tenants)
       .filter((tenant) => matchesSearch([
         tenant.tenant_id,
@@ -455,16 +478,18 @@ function renderTable(view) {
         tenant.primary_region_name || "",
         tenant.owner_username || "",
         tenant.activation_code || "",
-        getLicenseForTenant(store, tenant.tenant_id)?.status || "",
+        getLicenseStatusInfo(getLicenseForTenant(store, tenant.tenant_id)).label,
+        getLicenseStatusInfo(getLicenseForTenant(store, tenant.tenant_id)).detail,
         getTenantActivity(store, tenant.tenant_id)
       ]))
       .map((tenant) => [
         tenant.tenant_id,
         `${tenant.name}<br><span class="dim-copy">${tenant.bank_name}</span>`,
         (() => {
-          const license = getLicenseForTenant(store, tenant.tenant_id);
-          return { chip: license?.status || "UNLICENSED", tone: license?.status === "ACTIVE" ? "" : "dim" };
+          const info = getLicenseStatusInfo(getLicenseForTenant(store, tenant.tenant_id));
+          return { chip: info.label, tone: info.tone };
         })(),
+        (() => getLicenseStatusInfo(getLicenseForTenant(store, tenant.tenant_id)).detail)(),
         (() => {
           const health = getTenantHealth(store, tenant.tenant_id);
           return { chip: health.label, tone: health.tone };
@@ -480,6 +505,11 @@ function renderTable(view) {
             tenant.status === "ACTIVE"
               ? { label: "Suspend", kind: "suspend-tenant", tenantId: tenant.tenant_id, tone: "danger", permission: "suspend_tenant" }
               : { label: "Activate", kind: "activate-tenant", tenantId: tenant.tenant_id, permission: "activate_tenant" },
+            { label: "Extend 30d", kind: "extend-license", tenantId: tenant.tenant_id, permission: "extend_license" },
+            getLicenseStatusInfo(getLicenseForTenant(store, tenant.tenant_id)).label === "SUSPENDED"
+              ? { label: "Activate License", kind: "activate-license", tenantId: tenant.tenant_id, permission: "activate_license" }
+              : { label: "Suspend License", kind: "suspend-license", tenantId: tenant.tenant_id, tone: "danger", permission: "suspend_license" },
+            { label: "Expire", kind: "expire-license", tenantId: tenant.tenant_id, tone: "danger", permission: "expire_license" },
             { label: "Delete", kind: "delete-tenant", tenantId: tenant.tenant_id, tone: "danger", permission: "delete_tenant" }
           ].filter(Boolean)
         }
@@ -1022,7 +1052,11 @@ async function runTenantAction(kind, tenantId) {
     "suspend-tenant": "suspend_tenant",
     "activate-tenant": "activate_tenant",
     "reissue-code": "reissue_activation_code",
-    "delete-tenant": "delete_tenant"
+    "delete-tenant": "delete_tenant",
+    "suspend-license": "suspend_license",
+    "activate-license": "activate_license",
+    "extend-license": "extend_license",
+    "expire-license": "expire_license"
   };
 
   if (kind === "delete-tenant") {
@@ -1033,9 +1067,33 @@ async function runTenantAction(kind, tenantId) {
     }
   }
 
-  const result = await runAdminAction(mapping[kind], {
+  if (kind === "expire-license") {
+    const confirmed = window.confirm(`Expire the license for ${tenantId} now? Tenant users will be blocked from logging in until the license is reactivated or extended.`);
+    if (!confirmed) {
+      addLog(`License expiry canceled for ${tenantId}.`);
+      return;
+    }
+  }
+
+  const payload = {
     target_tenant_id: tenantId
-  });
+  };
+
+  if (kind === "extend-license") {
+    const raw = window.prompt("Extend license by how many days?", "30");
+    if (raw === null) {
+      addLog(`License extension canceled for ${tenantId}.`);
+      return;
+    }
+    const days = Number(raw);
+    if (!days || days < 1) {
+      addLog("License extension must be at least 1 day.");
+      return;
+    }
+    payload.days = days;
+  }
+
+  const result = await runAdminAction(mapping[kind], payload);
   if (!result.ok) {
     addLog(result.error || `${kind} failed.`);
     return;
@@ -1196,7 +1254,7 @@ function wireAdminActions() {
       await runStaffAction(kind, button.dataset.userId);
       return;
     }
-    if (["edit-tenant", "suspend-tenant", "activate-tenant", "reissue-code", "delete-tenant"].includes(kind)) {
+    if (["edit-tenant", "suspend-tenant", "activate-tenant", "reissue-code", "delete-tenant", "suspend-license", "activate-license", "extend-license", "expire-license"].includes(kind)) {
       await runTenantAction(kind, button.dataset.tenantId);
       return;
     }

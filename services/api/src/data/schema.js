@@ -55,6 +55,8 @@ export const STORE_TABLES = [
       "setup_box_key",
       "marketplace_order_id",
       "issued_at",
+      "renewed_at",
+      "expires_at",
       "source"
     ],
     defaults: {
@@ -63,6 +65,8 @@ export const STORE_TABLES = [
       setup_box_key: "",
       marketplace_order_id: "",
       issued_at: "",
+      renewed_at: "",
+      expires_at: "",
       source: "manual"
     }
   },
@@ -221,6 +225,8 @@ export const CREATE_TABLE_STATEMENTS = [
     setup_box_key TEXT,
     marketplace_order_id TEXT,
     issued_at TIMESTAMPTZ,
+    renewed_at TIMESTAMPTZ,
+    expires_at TIMESTAMPTZ,
     source TEXT
   )`,
   `CREATE TABLE IF NOT EXISTS regions (
@@ -318,5 +324,7 @@ export const CREATE_TABLE_STATEMENTS = [
   )`,
   `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS payroll_default_amount NUMERIC(18,2) NOT NULL DEFAULT 250`,
   `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS primary_region_name TEXT`,
-  `ALTER TABLE licenses ADD COLUMN IF NOT EXISTS setup_box_key TEXT`
+  `ALTER TABLE licenses ADD COLUMN IF NOT EXISTS setup_box_key TEXT`,
+  `ALTER TABLE licenses ADD COLUMN IF NOT EXISTS renewed_at TIMESTAMPTZ`,
+  `ALTER TABLE licenses ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ`
 ];
