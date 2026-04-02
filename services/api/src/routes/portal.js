@@ -386,6 +386,14 @@ async function activateOwner(store, payload) {
     return { ok: false, error: "Activation code not recognized." };
   }
 
+  if (String(tenant.owner_username || "").trim()) {
+    return { ok: false, error: "Activation code has already been used." };
+  }
+
+  if ((store.users || []).some((user) => user.tenant_id === tenant.tenant_id && String(user.role || "").trim() === "tenant_owner")) {
+    return { ok: false, error: "Tenant owner account already exists." };
+  }
+
   if (store.users.some((user) => String(user.username || "").trim().toLowerCase() === String(payload.username || "").trim().toLowerCase())) {
     return { ok: false, error: "Username is already in use." };
   }
@@ -405,6 +413,7 @@ async function activateOwner(store, payload) {
 
   tenant.owner_username = payload.username;
   tenant.owner_avatar_name = payload.avatar_name || tenant.owner_avatar_name || "";
+  tenant.activation_code = "";
 
   const license = (store.licenses || []).find((item) => item.tenant_id === tenant.tenant_id);
   if (license && !license.buyer_avatar_name) {
