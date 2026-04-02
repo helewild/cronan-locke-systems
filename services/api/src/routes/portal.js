@@ -1052,6 +1052,24 @@ function createEmployment(store, tenantId, actorName, payload) {
   appendPortalAudit(store, actorName, tenantId, "employment", employment.employment_id, accountId, "employment_create", payRate, `Employment created for ${account.customer_name}`);
 }
 
+function resolveCreateUserRole(actorUser, requestedRole) {
+  const role = String(requestedRole || "").trim() || "bank_admin";
+  const standardRoles = ["bank_admin", "teller", "security_admin"];
+
+  if (role === "platform_admin") {
+    if (actorUser.role !== "platform_admin") {
+      throw new Error("Only a platform admin can assign the platform_admin role.");
+    }
+    return { role: "platform_admin", tenantId: "platform-root" };
+  }
+
+  if (!standardRoles.includes(role)) {
+    throw new Error("Unsupported staff role.");
+  }
+
+  return { role, tenantId: actorUser.tenant_id };
+}
+
 function updateEmployment(store, tenantId, actorName, payload) {
   const employment = findEmployment(store, tenantId, payload.employment_id);
   if (!employment) {
@@ -1193,10 +1211,10 @@ async function changePassword(store, payload) {
   };
 }
 
-function createStaffUser(store, tenantId, actorName, payload) {
+function createStaffUser(store, actorUser, actorName, payload) {
   const username = String(payload.new_username || "").trim();
   const avatarName = String(payload.new_avatar_name || "").trim();
-  const role = String(payload.new_role || "").trim() || "bank_admin";
+  const resolved = resolveCreateUserRole(actorUser, payload.new_role);
   const password = String(payload.new_password || "");
 
   if (!username || !avatarName || !password) {
@@ -1209,10 +1227,10 @@ function createStaffUser(store, tenantId, actorName, payload) {
   const nextNumber = (store.users || []).length + 10001;
   const user = {
     user_id: "USR-" + String(nextNumber),
-    tenant_id: tenantId,
+    tenant_id: resolved.tenantId,
     username,
     password_hash: hashPassword(password),
-    role,
+    role: resolved.role,
     avatar_name: avatarName,
     status: "ACTIVE",
     session_token: "",
@@ -1221,7 +1239,7 @@ function createStaffUser(store, tenantId, actorName, payload) {
   };
 
   store.users.push(user);
-  appendPortalAudit(store, actorName, tenantId, "user", user.user_id, null, "staff_user_create", 0, "Created " + role + " user " + username);
+  appendPortalAudit(store, actorName, resolved.tenantId, "user", user.user_id, null, "staff_user_create", 0, "Created " + resolved.role + " user " + username);
 }
 
 function updateStaffStatus(store, tenantId, actorName, userId, nextStatus) {
@@ -1384,7 +1402,7 @@ async function adminAction(store, payload) {
       break;
     case "create_staff_user":
       requirePermission(user, "create_staff_user");
-      createStaffUser(store, user.tenant_id, actorName, payload);
+      createStaffUser(store, user, actorName, payload);
       break;
     case "create_employment":
       requirePermission(user, "create_employment");

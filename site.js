@@ -26,6 +26,10 @@ const state = {
 };
 
 const STAFF_ROLE_HELP = {
+  platform_admin: {
+    title: "Platform Admin",
+    copy: "Global Cronan & Locke operator access. Can manage tenants, licensing, and platform-wide controls."
+  },
   bank_admin: {
     title: "Bank Admin",
     copy: "Can manage accounts, cards, fines, loans, payroll, and employment records."
@@ -131,7 +135,14 @@ function openStaffModal() {
   document.getElementById("staff-created-copy").textContent = "";
   document.getElementById("staff-modal").classList.remove("hidden");
   document.getElementById("staff-modal").setAttribute("aria-hidden", "false");
-  document.getElementById("staff-role").value = "bank_admin";
+  const roleSelect = document.getElementById("staff-role");
+  roleSelect.innerHTML = `
+    ${state.session?.role === "platform_admin" ? '<option value="platform_admin">Platform Admin</option>' : ""}
+    <option value="bank_admin">Bank Admin</option>
+    <option value="teller">Teller</option>
+    <option value="security_admin">Security Admin</option>
+  `;
+  roleSelect.value = state.session?.role === "platform_admin" ? "platform_admin" : "bank_admin";
   updateStaffRoleHint();
   document.getElementById("staff-username").focus();
 }
