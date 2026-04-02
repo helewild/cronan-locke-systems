@@ -54,6 +54,8 @@ Current source files:
 - `docs/integration_progress.md`
 - `docs/workflow.md`
 - `docs/atm_test_checklist.md`
+- `docs/temporary_live_stack.md`
+- `docs/google_sheets_schema.md`
 
 ## Repo Direction
 
@@ -80,3 +82,17 @@ Current example tenant:
 3. Expand the API scaffold into real persistence and auth
 4. Expand the admin scaffold into tenant and incident management pages
 5. Connect objects to live API endpoints when hosting is ready
+
+## Temporary Live Phase
+
+While waiting on the VPS, the project can run as:
+
+- `GitHub Pages` for the live site
+- `Google Apps Script` for temporary auth and bridge logic
+- `Google Sheets` for temporary storage
+
+Bridge starter files:
+
+- `ops/google-apps-script/Code.gs`
+- `ops/google-apps-script/appsscript.json`
+- `ops/google-apps-script/README.md`
