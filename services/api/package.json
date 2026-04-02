@@ -7,7 +7,8 @@
   "scripts": {
     "dev": "node src/server.js",
     "start": "node src/server.js",
-    "db:sync": "node scripts/sync-store-to-postgres.mjs"
+    "db:sync": "node scripts/sync-store-to-postgres.mjs",
+    "seed:platform-admin": "node scripts/seed-platform-admin.mjs"
   },
   "dependencies": {
     "pg": "^8.20.0"
