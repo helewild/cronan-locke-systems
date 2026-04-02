@@ -35,6 +35,7 @@ const ROLE_PERMISSIONS = {
     "view_platform",
     "view_bank_core",
     "view_accounts",
+    "view_employment",
     "view_staff",
     "view_cards",
     "view_transactions",
@@ -55,6 +56,9 @@ const ROLE_PERMISSIONS = {
     "activate_license",
     "extend_license",
     "expire_license",
+    "create_employment",
+    "update_employment",
+    "terminate_employment",
     "create_staff_user",
     "disable_staff_user",
     "enable_staff_user",
@@ -77,6 +81,7 @@ const ROLE_PERMISSIONS = {
   tenant_owner: [
     "view_bank_core",
     "view_accounts",
+    "view_employment",
     "view_staff",
     "view_cards",
     "view_transactions",
@@ -92,6 +97,9 @@ const ROLE_PERMISSIONS = {
     "disable_staff_user",
     "enable_staff_user",
     "reset_staff_session",
+    "create_employment",
+    "update_employment",
+    "terminate_employment",
     "create_customer_account",
     "deposit_account",
     "withdraw_account",
@@ -110,6 +118,7 @@ const ROLE_PERMISSIONS = {
   bank_admin: [
     "view_bank_core",
     "view_accounts",
+    "view_employment",
     "view_cards",
     "view_transactions",
     "view_fines",
@@ -117,6 +126,9 @@ const ROLE_PERMISSIONS = {
     "view_payroll",
     "view_audit_logs",
     "create_customer_account",
+    "create_employment",
+    "update_employment",
+    "terminate_employment",
     "deposit_account",
     "withdraw_account",
     "freeze_account",
@@ -186,6 +198,7 @@ function buildTenantStore(store, tenantId) {
       fines: (store.fines || []).map((item) => ({ ...item })),
       loans: (store.loans || []).map((item) => ({ ...item })),
       transactions: (store.transactions || []).map((item) => ({ ...item })),
+      employments: (store.employments || []).map((item) => ({ ...item })),
       audit_logs: (store.audit_logs || []).map((item) => ({ ...item })),
       vault_incidents: (store.vault_incidents || []).map((item) => ({ ...item })),
       branches: (store.branches || []).map((item) => ({ ...item })),
@@ -217,6 +230,7 @@ function buildTenantStore(store, tenantId) {
     fines: (store.fines || []).filter((item) => accountIds.has(item.account_id)),
     loans: (store.loans || []).filter((item) => accountIds.has(item.account_id)),
     transactions: (store.transactions || []).filter((item) => accountIds.has(item.account_id)),
+    employments: (store.employments || []).filter((item) => item.tenant_id === tenantId),
     audit_logs: (store.audit_logs || []).filter((item) => item.tenant_id === tenantId),
     vault_incidents: (store.vault_incidents || []).filter((item) => item.tenant_id === tenantId),
     branches: (store.branches || []).filter((item) => item.tenant_id === tenantId),
@@ -292,6 +306,10 @@ function findLoan(store, tenantId, loanId) {
 
 function findUserById(store, tenantId, userId) {
   return (store.users || []).find((item) => item.tenant_id === tenantId && item.user_id === userId) || null;
+}
+
+function findEmployment(store, tenantId, employmentId) {
+  return (store.employments || []).find((item) => item.tenant_id === tenantId && item.employment_id === employmentId) || null;
 }
 
 function findTenant(store, tenantId) {
@@ -404,6 +422,14 @@ function nextLicenseId(store) {
     .filter((value) => Number.isFinite(value));
   const next = (numeric.length ? Math.max(...numeric) : 10000) + 1;
   return "LIC-" + String(next);
+}
+
+function nextEmploymentId(store) {
+  const numeric = (store.employments || [])
+    .map((item) => Number(String(item.employment_id || "").replace("EMP-", "")))
+    .filter((value) => Number.isFinite(value));
+  const next = (numeric.length ? Math.max(...numeric) : 10000) + 1;
+  return "EMP-" + String(next);
 }
 
 function buildActivationCode(tenantId) {
@@ -639,26 +665,56 @@ function shutdownAtmNetwork(store, tenantId, actorName) {
 
 function runPayroll(store, tenantId, actorName, amountInput) {
   const tenant = findTenant(store, tenantId);
-  const amount = Number(amountInput || tenant?.payroll_default_amount || 250);
-  if (!Number.isFinite(amount) || amount <= 0) {
+  const employments = (store.employments || []).filter((employment) => employment.tenant_id === tenantId && String(employment.status || "").toUpperCase() === "ACTIVE");
+  const fallbackAmount = Number(amountInput || tenant?.payroll_default_amount || 250);
+  if (!employments.length && (!Number.isFinite(fallbackAmount) || fallbackAmount <= 0)) {
     throw new Error("Amount must be greater than zero.");
   }
 
-  const accounts = (store.accounts || []).filter((account) => account.tenant_id === tenantId && isActive(account.status));
-  if (!accounts.length) {
+  const activeAccounts = (store.accounts || []).filter((account) => account.tenant_id === tenantId && isActive(account.status));
+  if (!activeAccounts.length) {
     throw new Error("No active accounts found for payroll.");
   }
 
-  accounts.forEach((account) => {
+  const targets = employments.length
+    ? employments.map((employment) => {
+      const account = findAccount(store, tenantId, employment.account_id);
+      return account && isActive(account.status)
+        ? { account, amount: Number(employment.pay_rate || 0), employment }
+        : null;
+    }).filter(Boolean)
+    : activeAccounts.map((account) => ({ account, amount: fallbackAmount, employment: null }));
+
+  if (!targets.length) {
+    throw new Error("No eligible payroll targets found.");
+  }
+
+  targets.forEach(({ account, amount, employment }) => {
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return;
+    }
     account.balance = Number(account.balance || 0) + amount;
     createTransaction(store, {
       account_id: account.account_id,
       type: "PAYROLL",
       amount,
       direction: "IN",
-      memo: "VPS payroll run"
+      memo: employment ? `${employment.employer_name} payroll` : "VPS payroll run"
     });
-    appendPortalAudit(store, actorName, tenantId, "payroll", "vps-payroll", account.account_id, "payroll_run", amount, "Payroll deposit");
+    if (employment) {
+      employment.last_paid_at = new Date().toISOString();
+    }
+    appendPortalAudit(
+      store,
+      actorName,
+      tenantId,
+      "payroll",
+      employment ? employment.employment_id : "vps-payroll",
+      account.account_id,
+      "payroll_run",
+      amount,
+      employment ? `Payroll deposit for ${employment.title}` : "Payroll deposit"
+    );
   });
 }
 
@@ -947,6 +1003,91 @@ function updateCardState(store, tenantId, actorName, cardId, nextState, action, 
 
   card.state = nextState;
   appendPortalAudit(store, actorName, tenantId, "card", card.card_id, card.account_id, action, 0, memo);
+}
+
+function createEmployment(store, tenantId, actorName, payload) {
+  if (!Array.isArray(store.employments)) {
+    store.employments = [];
+  }
+
+  const accountId = String(payload.account_id || "").trim();
+  const employerName = String(payload.employer_name || "").trim();
+  const departmentName = String(payload.department_name || "").trim();
+  const title = String(payload.title || "").trim();
+  const payRate = Number(payload.pay_rate || 0);
+  const payCycle = String(payload.pay_cycle || "WEEKLY").trim().toUpperCase();
+
+  if (!accountId || !employerName || !title) {
+    throw new Error("Account, employer, and title are required.");
+  }
+  if (!Number.isFinite(payRate) || payRate <= 0) {
+    throw new Error("Pay rate must be greater than zero.");
+  }
+
+  const account = findAccount(store, tenantId, accountId);
+  if (!account) {
+    throw new Error("Linked account not found.");
+  }
+
+  const existing = (store.employments || []).find((item) => item.tenant_id === tenantId && item.account_id === accountId && item.status === "ACTIVE");
+  if (existing) {
+    throw new Error("Account already has an active employment record.");
+  }
+
+  const employment = {
+    employment_id: nextEmploymentId(store),
+    tenant_id: tenantId,
+    account_id: accountId,
+    employer_name: employerName,
+    department_name: departmentName,
+    title,
+    pay_rate: payRate,
+    pay_cycle: payCycle,
+    status: "ACTIVE",
+    hired_at: new Date().toISOString(),
+    last_paid_at: ""
+  };
+
+  store.employments.push(employment);
+  appendPortalAudit(store, actorName, tenantId, "employment", employment.employment_id, accountId, "employment_create", payRate, `Employment created for ${account.customer_name}`);
+}
+
+function updateEmployment(store, tenantId, actorName, payload) {
+  const employment = findEmployment(store, tenantId, payload.employment_id);
+  if (!employment) {
+    throw new Error("Employment record not found.");
+  }
+
+  const employerName = String(payload.employer_name || employment.employer_name).trim();
+  const departmentName = String(payload.department_name ?? employment.department_name).trim();
+  const title = String(payload.title || employment.title).trim();
+  const payRate = Number(payload.pay_rate ?? employment.pay_rate);
+  const payCycle = String(payload.pay_cycle || employment.pay_cycle || "WEEKLY").trim().toUpperCase();
+
+  if (!employerName || !title) {
+    throw new Error("Employer and title are required.");
+  }
+  if (!Number.isFinite(payRate) || payRate <= 0) {
+    throw new Error("Pay rate must be greater than zero.");
+  }
+
+  employment.employer_name = employerName;
+  employment.department_name = departmentName;
+  employment.title = title;
+  employment.pay_rate = payRate;
+  employment.pay_cycle = payCycle;
+
+  appendPortalAudit(store, actorName, tenantId, "employment", employment.employment_id, employment.account_id, "employment_update", payRate, "Employment record updated");
+}
+
+function terminateEmployment(store, tenantId, actorName, employmentId) {
+  const employment = findEmployment(store, tenantId, employmentId);
+  if (!employment) {
+    throw new Error("Employment record not found.");
+  }
+
+  employment.status = "TERMINATED";
+  appendPortalAudit(store, actorName, tenantId, "employment", employment.employment_id, employment.account_id, "employment_terminate", 0, "Employment terminated");
 }
 
 function payFine(store, tenantId, actorName, fineId) {
@@ -1244,6 +1385,18 @@ async function adminAction(store, payload) {
     case "create_staff_user":
       requirePermission(user, "create_staff_user");
       createStaffUser(store, user.tenant_id, actorName, payload);
+      break;
+    case "create_employment":
+      requirePermission(user, "create_employment");
+      createEmployment(store, user.tenant_id, actorName, payload);
+      break;
+    case "update_employment":
+      requirePermission(user, "update_employment");
+      updateEmployment(store, user.tenant_id, actorName, payload);
+      break;
+    case "terminate_employment":
+      requirePermission(user, "terminate_employment");
+      terminateEmployment(store, user.tenant_id, actorName, payload.employment_id);
       break;
     case "disable_staff_user":
       requirePermission(user, "disable_staff_user");

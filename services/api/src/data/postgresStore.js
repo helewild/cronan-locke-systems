@@ -87,6 +87,8 @@ function prepareValue(column, value, definition) {
     || column === "issued_at"
     || column === "renewed_at"
     || column === "expires_at"
+    || column === "hired_at"
+    || column === "last_paid_at"
   ) {
     return value || null;
   }

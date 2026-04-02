@@ -29,6 +29,7 @@ const VIEW_PERMISSIONS = {
   platform: "view_platform",
   "bank-core": "view_bank_core",
   accounts: "view_accounts",
+  employment: "view_employment",
   staff: "view_staff",
   cards: "view_cards",
   transactions: "view_transactions",
@@ -416,6 +417,7 @@ function renderDetailPanel() {
   const card = safeArray(store.cards).find((item) => item.account_id === account.account_id);
   const fine = safeArray(store.fines).find((item) => item.account_id === account.account_id);
   const loan = safeArray(store.loans).find((item) => item.account_id === account.account_id);
+  const employment = safeArray(store.employments).find((item) => item.account_id === account.account_id && item.status === "ACTIVE");
   const recent = getTransactions(store).filter((item) => item.account_id === account.account_id).slice(0, 3);
 
   const items = [
@@ -424,6 +426,7 @@ function renderDetailPanel() {
     ["Card", card ? `${card.card_id}<br>State: <strong>${card.state}</strong><br>${card.card_number}` : "No linked card"],
     ["Obligations", `${fine ? `Fine: <strong>${fine.status}</strong> (${fine.reference})<br>` : "No active fine<br>"}${loan ? `Loan: <strong>${loan.status}</strong> (${loan.terms})` : "No active loan"}`],
     ["Recent Activity", recent.length ? recent.map((item) => `${item.type} L$${item.amount} ${item.direction}`).join("<br>") : "No transactions found"],
+    ["Employment", employment ? `${employment.title}<br>${employment.employer_name}<br>Pay Rate: <strong>L$${employment.pay_rate}</strong><br>Cycle: ${employment.pay_cycle}` : "No active employment"],
     ["Player Link", `Player ID: ${account.player_id || "-"}<br>Branch: ${account.branch_id || "-"}<br>Tenant: ${account.tenant_id || "-"}`]
   ];
 
@@ -544,6 +547,43 @@ function renderTable(view) {
         ]
       }
     ]);
+  } else if (view === "employment") {
+    title.textContent = "Employment";
+    columns = ["Employment ID", "Employee", "Employer", "Title", "Pay Rate", "Status", "Actions"];
+    rows = safeArray(store.employments)
+      .filter((employment) => {
+        const account = safeArray(store.accounts).find((item) => item.account_id === employment.account_id);
+        return matchesSearch([
+          employment.employment_id,
+          employment.account_id,
+          account?.customer_name || "",
+          employment.employer_name,
+          employment.department_name || "",
+          employment.title,
+          employment.status,
+          String(employment.pay_rate)
+        ]);
+      })
+      .map((employment) => {
+        const account = safeArray(store.accounts).find((item) => item.account_id === employment.account_id);
+        return [
+          employment.employment_id,
+          `${account?.customer_name || employment.account_id}<br><span class="dim-copy">${employment.account_id}</span>`,
+          `${employment.employer_name}${employment.department_name ? `<br><span class="dim-copy">${employment.department_name}</span>` : ""}`,
+          `${employment.title}<br><span class="dim-copy">${employment.pay_cycle}</span>`,
+          { money: employment.pay_rate },
+          { chip: employment.status, tone: employment.status === "ACTIVE" ? "" : "dim" },
+          {
+            actions: [
+              { label: "New Job", kind: "create-employment", permission: "create_employment" },
+              { label: "Edit", kind: "edit-employment", employmentId: employment.employment_id, permission: "update_employment" },
+              employment.status === "ACTIVE"
+                ? { label: "Terminate", kind: "terminate-employment", employmentId: employment.employment_id, tone: "danger", permission: "terminate_employment" }
+                : null
+            ].filter(Boolean)
+          }
+        ];
+      });
   } else if (view === "staff") {
     title.textContent = "Staff Users";
     columns = ["Username", "Avatar", "Role", "Status", "Actions"];
@@ -710,12 +750,12 @@ function setActiveView(view) {
     link.classList.toggle("hidden", !canAccessView(link.dataset.view));
   });
   const actionButton = document.getElementById("view-action-btn");
-  actionButton.classList.toggle("hidden", !(view === "platform" || view === "payroll" || view === "accounts"));
-  actionButton.textContent = view === "platform" ? "New Tenant" : (view === "accounts" ? "New Account" : "Run Payroll");
+  actionButton.classList.toggle("hidden", !(view === "platform" || view === "payroll" || view === "accounts" || view === "employment"));
+  actionButton.textContent = view === "platform" ? "New Tenant" : (view === "accounts" ? "New Account" : (view === "employment" ? "New Job" : "Run Payroll"));
   actionButton.disabled =
     view === "platform"
       ? !hasPermission("create_tenant")
-      : (view === "accounts" ? !hasPermission("create_customer_account") : (view === "payroll" ? !hasPermission("run_payroll") : false));
+      : (view === "accounts" ? !hasPermission("create_customer_account") : (view === "employment" ? !hasPermission("create_employment") : (view === "payroll" ? !hasPermission("run_payroll") : false)));
   renderTable(view);
   savePreviewState();
 }
@@ -1003,6 +1043,138 @@ async function runStaffAction(kind, userId) {
   addLog(result.message || `${kind} applied to ${userId}.`);
 }
 
+async function runEmploymentAction(kind, employmentId) {
+  if (kind === "create-employment") {
+    const accountId = window.prompt("Account ID to employ:", state.selectedAccountId || "");
+    if (!accountId || !accountId.trim()) {
+      addLog("Employment creation canceled.");
+      return;
+    }
+    const employerName = window.prompt("Employer or business name:", "Whispering Pines Bank");
+    if (!employerName || !employerName.trim()) {
+      addLog("Employment creation canceled.");
+      return;
+    }
+    const departmentName = window.prompt("Department name:", "Banking");
+    if (departmentName === null) {
+      addLog("Employment creation canceled.");
+      return;
+    }
+    const title = window.prompt("Job title:", "Teller");
+    if (!title || !title.trim()) {
+      addLog("Employment creation canceled.");
+      return;
+    }
+    const payRaw = window.prompt("Pay rate per payroll run:", "250");
+    if (payRaw === null) {
+      addLog("Employment creation canceled.");
+      return;
+    }
+    const payRate = Number(payRaw);
+    if (!payRate || payRate < 1) {
+      addLog("Pay rate must be greater than zero.");
+      return;
+    }
+    const cycle = window.prompt("Pay cycle:", "WEEKLY");
+    if (!cycle || !cycle.trim()) {
+      addLog("Employment creation canceled.");
+      return;
+    }
+
+    const result = await runAdminAction("create_employment", {
+      account_id: accountId.trim(),
+      employer_name: employerName.trim(),
+      department_name: String(departmentName || "").trim(),
+      title: title.trim(),
+      pay_rate: payRate,
+      pay_cycle: cycle.trim().toUpperCase()
+    });
+    if (!result.ok) {
+      addLog(result.error || "Employment creation failed.");
+      return;
+    }
+    applyStore(result.store);
+    addLog(result.message || `Employment created for ${accountId.trim()}.`);
+    return;
+  }
+
+  if (!employmentId) {
+    addLog("Missing employment id.");
+    return;
+  }
+
+  if (kind === "edit-employment") {
+    const employment = safeArray(state.store?.employments).find((item) => item.employment_id === employmentId);
+    if (!employment) {
+      addLog("Employment record not found.");
+      return;
+    }
+    const employerName = window.prompt("Employer or business name:", employment.employer_name || "");
+    if (!employerName || !employerName.trim()) {
+      addLog("Employment update canceled.");
+      return;
+    }
+    const departmentName = window.prompt("Department name:", employment.department_name || "");
+    if (departmentName === null) {
+      addLog("Employment update canceled.");
+      return;
+    }
+    const title = window.prompt("Job title:", employment.title || "");
+    if (!title || !title.trim()) {
+      addLog("Employment update canceled.");
+      return;
+    }
+    const payRaw = window.prompt("Pay rate per payroll run:", String(employment.pay_rate || 0));
+    if (payRaw === null) {
+      addLog("Employment update canceled.");
+      return;
+    }
+    const payRate = Number(payRaw);
+    if (!payRate || payRate < 1) {
+      addLog("Pay rate must be greater than zero.");
+      return;
+    }
+    const cycle = window.prompt("Pay cycle:", employment.pay_cycle || "WEEKLY");
+    if (!cycle || !cycle.trim()) {
+      addLog("Employment update canceled.");
+      return;
+    }
+
+    const result = await runAdminAction("update_employment", {
+      employment_id: employmentId,
+      employer_name: employerName.trim(),
+      department_name: String(departmentName || "").trim(),
+      title: title.trim(),
+      pay_rate: payRate,
+      pay_cycle: cycle.trim().toUpperCase()
+    });
+    if (!result.ok) {
+      addLog(result.error || "Employment update failed.");
+      return;
+    }
+    applyStore(result.store);
+    addLog(result.message || `Employment updated for ${employmentId}.`);
+    return;
+  }
+
+  if (kind === "terminate-employment") {
+    const confirmed = window.confirm(`Terminate employment ${employmentId}?`);
+    if (!confirmed) {
+      addLog(`Employment termination canceled for ${employmentId}.`);
+      return;
+    }
+    const result = await runAdminAction("terminate_employment", {
+      employment_id: employmentId
+    });
+    if (!result.ok) {
+      addLog(result.error || "Employment termination failed.");
+      return;
+    }
+    applyStore(result.store);
+    addLog(result.message || `Employment terminated for ${employmentId}.`);
+  }
+}
+
 async function runTenantAction(kind, tenantId) {
   if (!tenantId) {
     addLog("Missing tenant id for platform action.");
@@ -1254,6 +1426,10 @@ function wireAdminActions() {
       await runStaffAction(kind, button.dataset.userId);
       return;
     }
+    if (["create-employment", "edit-employment", "terminate-employment"].includes(kind)) {
+      await runEmploymentAction(kind, button.dataset.employmentId);
+      return;
+    }
     if (["edit-tenant", "suspend-tenant", "activate-tenant", "reissue-code", "delete-tenant", "suspend-license", "activate-license", "extend-license", "expire-license"].includes(kind)) {
       await runTenantAction(kind, button.dataset.tenantId);
       return;
@@ -1450,6 +1626,10 @@ function wireAdminActions() {
     }
     if (state.view === "accounts") {
       await runAccountAction("create-account");
+      return;
+    }
+    if (state.view === "employment") {
+      await runEmploymentAction("create-employment");
       return;
     }
     if (state.view !== "payroll") {

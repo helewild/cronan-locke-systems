@@ -109,6 +109,31 @@ export const STORE_TABLES = [
     }
   },
   {
+    key: "employments",
+    table: "employments",
+    columns: [
+      "employment_id",
+      "tenant_id",
+      "account_id",
+      "employer_name",
+      "department_name",
+      "title",
+      "pay_rate",
+      "pay_cycle",
+      "status",
+      "hired_at",
+      "last_paid_at"
+    ],
+    numberColumns: ["pay_rate"],
+    defaults: {
+      pay_rate: 0,
+      pay_cycle: "WEEKLY",
+      status: "ACTIVE",
+      hired_at: "",
+      last_paid_at: ""
+    }
+  },
+  {
     key: "cards",
     table: "cards",
     columns: ["card_id", "account_id", "card_number", "state"]
@@ -259,6 +284,19 @@ export const CREATE_TABLE_STATEMENTS = [
     outstanding_fine NUMERIC(18,2) NOT NULL DEFAULT 0,
     loan_balance NUMERIC(18,2) NOT NULL DEFAULT 0,
     status TEXT NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS employments (
+    employment_id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    account_id TEXT NOT NULL,
+    employer_name TEXT NOT NULL,
+    department_name TEXT,
+    title TEXT NOT NULL,
+    pay_rate NUMERIC(18,2) NOT NULL DEFAULT 0,
+    pay_cycle TEXT NOT NULL DEFAULT 'WEEKLY',
+    status TEXT NOT NULL DEFAULT 'ACTIVE',
+    hired_at TIMESTAMPTZ,
+    last_paid_at TIMESTAMPTZ
   )`,
   `CREATE TABLE IF NOT EXISTS cards (
     card_id TEXT PRIMARY KEY,
