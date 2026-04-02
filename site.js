@@ -1793,13 +1793,18 @@ async function boot() {
       token: session.token,
       tenant_id: session.tenant_id
     }).then((result) => {
-      if (result.ok && result.store) {
-        state.store = result.store;
+      if (result.ok) {
+        if (result.store) {
+          state.store = result.store;
+        }
+        applySession(result.session || session);
+        setInterval(() => setClock("clock-line"), 1000);
+        return;
       }
-      applySession(session);
-      setInterval(() => setClock("clock-line"), 1000);
+      clearSession();
+      addLog(result.error || "Saved session is no longer valid.");
+      logout();
     }).catch(() => {
-      applySession(session);
       setInterval(() => setClock("clock-line"), 1000);
     });
   }
