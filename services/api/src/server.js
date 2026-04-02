@@ -8,6 +8,7 @@ import { handleDashboard } from "./routes/dashboard.js";
 import { handleHealth } from "./routes/health.js";
 import { handleIncidentAction } from "./routes/incidentActions.js";
 import { handleIncidents } from "./routes/incidents.js";
+import { handlePortal } from "./routes/portal.js";
 import { handleTransactions } from "./routes/statements.js";
 import { handleTenantSummary } from "./routes/tenant.js";
 import { handleTenants } from "./routes/tenants.js";
@@ -58,6 +59,10 @@ const server = http.createServer((req, res) => {
 
   if (req.method === "POST" && url.pathname === "/api/v1/actions") {
     return handleActionRequest(req, res);
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/v1/portal") {
+    return handlePortal(req, res);
   }
 
   return sendJson(res, 404, {

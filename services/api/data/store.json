@@ -5,12 +5,30 @@
       "name": "Whispering Pines",
       "bank_name": "Whispering Pines Bank",
       "status": "ACTIVE",
+      "owner_avatar_name": "Whispering Pines Owner",
+      "owner_username": "admin",
+      "activation_code": "DEMO-OWNER-001",
+      "created_at": "2026-04-02T00:00:00Z",
       "feature_flags": [
         "base_banking",
         "justice_and_fines",
         "loans_and_credit",
         "crime_and_security"
       ]
+    }
+  ],
+  "users": [
+    {
+      "user_id": "USR-10001",
+      "tenant_id": "demo-tenant",
+      "username": "admin",
+      "password_hash": "d3ad9315b7be5dd53b31a273b3b3aba5defe700808305aa16a3062b76658a791",
+      "role": "tenant_owner",
+      "avatar_name": "Whispering Pines Owner",
+      "status": "ACTIVE",
+      "session_token": "",
+      "session_expires_at": "",
+      "must_reset_password": false
     }
   ],
   "regions": [
@@ -143,6 +161,22 @@
       "responding_unit": "NONE",
       "marked_cash_flag": false,
       "last_update": "Silent alert received"
+    }
+  ],
+  "atms": [
+    {
+      "atm_id": "atm-001",
+      "tenant_id": "demo-tenant",
+      "branch_name": "Main Branch",
+      "status": "ONLINE",
+      "scope": "Whispering Pines"
+    },
+    {
+      "atm_id": "atm-002",
+      "tenant_id": "demo-tenant",
+      "branch_name": "Main Branch Annex",
+      "status": "ONLINE",
+      "scope": "Whispering Pines"
     }
   ]
 }
