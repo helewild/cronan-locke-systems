@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Cronan &amp; Locke Systems</title>
-    <link rel="stylesheet" href="./site.css?v=20260402e">
+    <link rel="stylesheet" href="./site.css?v=20260402f">
   </head>
   <body>
     <div class="machine">
@@ -124,6 +124,9 @@
             <section class="work">
               <section class="accounts-panel panel">
                 <div id="view-title" class="terminal-title">Accounts</div>
+                <div id="search-shell" class="search-shell">
+                  <input id="table-search" class="table-search" type="text" placeholder="Search customer, account, card, fine, or loan">
+                </div>
                 <table>
                   <thead id="table-head"></thead>
                   <tbody id="table-body"></tbody>
@@ -139,6 +142,11 @@
                 <div class="logs">
                   <div class="terminal-title">Logs</div>
                   <div id="log-list" class="log-list"></div>
+                </div>
+
+                <div id="detail-panel" class="detail-panel hidden">
+                  <div class="terminal-title">Customer Detail</div>
+                  <div id="detail-grid" class="detail-grid"></div>
                 </div>
               </section>
 
@@ -166,7 +174,7 @@
       </div>
     </div>
 
-    <script src="./site-config.js?v=20260402e"></script>
-    <script src="./site.js?v=20260402e"></script>
+    <script src="./site-config.js?v=20260402f"></script>
+    <script src="./site.js?v=20260402f"></script>
   </body>
 </html>

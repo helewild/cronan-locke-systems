@@ -379,8 +379,45 @@ th { color: var(--text-dim); font-size: 12px; text-transform: uppercase; font-we
 }
 
 .logs { margin-top: 16px; }
+.search-shell { margin-bottom: 10px; }
+.table-search {
+  text-transform: none;
+  letter-spacing: 0.03em;
+}
 .log-list { max-height: 210px; overflow: auto; }
 .log-item { padding: 8px 10px; color: #c4cbb9; font-size: 13px; }
+.detail-panel { margin-top: 16px; padding: 14px; }
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.detail-card {
+  border: 1px solid rgba(64,73,58,0.35);
+  background: rgba(255,255,255,0.01);
+  padding: 10px;
+}
+.detail-label {
+  color: var(--text-dim);
+  text-transform: uppercase;
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+.detail-value {
+  color: #d6dccb;
+  line-height: 1.6;
+}
+.detail-value strong {
+  color: var(--accent);
+}
+.selected-row td {
+  background: rgba(167,188,134,0.06);
+}
+.dim-copy {
+  color: var(--text-dim);
+  font-size: 12px;
+  text-transform: uppercase;
+}
 .incident-panel { display: grid; align-content: start; gap: 12px; }
 
 .alert-box {
@@ -437,4 +474,5 @@ button:disabled {
 @media (max-width: 700px) {
   .metrics, .auth-badges { grid-template-columns: 1fr; }
   .header { grid-template-columns: 1fr; }
+  .detail-grid { grid-template-columns: 1fr; }
 }

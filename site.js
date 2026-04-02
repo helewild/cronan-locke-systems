@@ -20,7 +20,9 @@ const state = {
   atmNetwork: [],
   session: null,
   setupUsers: {},
-  passwordResetPromptedToken: null
+  passwordResetPromptedToken: null,
+  searchQuery: "",
+  selectedAccountId: null
 };
 
 const VIEW_PERMISSIONS = {
@@ -247,8 +249,76 @@ function getTransactions(store) {
   }));
 }
 
+function ensureSelectedAccount(store) {
+  const accounts = safeArray(store.accounts);
+  if (!accounts.length) {
+    state.selectedAccountId = null;
+    return;
+  }
+
+  const stillExists = accounts.some((account) => account.account_id === state.selectedAccountId);
+  if (!stillExists) {
+    state.selectedAccountId = accounts[0].account_id;
+  }
+}
+
+function getSelectedAccount(store) {
+  return safeArray(store.accounts).find((account) => account.account_id === state.selectedAccountId) || null;
+}
+
+function matchesSearch(values) {
+  if (!state.searchQuery) {
+    return true;
+  }
+
+  const haystack = values.join(" ").toLowerCase();
+  return haystack.includes(state.searchQuery);
+}
+
+function renderDetailPanel() {
+  const panel = document.getElementById("detail-panel");
+  const grid = document.getElementById("detail-grid");
+  const store = state.store;
+
+  if (!store || state.view !== "accounts") {
+    panel.classList.add("hidden");
+    grid.innerHTML = "";
+    return;
+  }
+
+  const account = getSelectedAccount(store);
+  if (!account) {
+    panel.classList.add("hidden");
+    grid.innerHTML = "";
+    return;
+  }
+
+  const card = safeArray(store.cards).find((item) => item.account_id === account.account_id);
+  const fine = safeArray(store.fines).find((item) => item.account_id === account.account_id);
+  const loan = safeArray(store.loans).find((item) => item.account_id === account.account_id);
+  const recent = getTransactions(store).filter((item) => item.account_id === account.account_id).slice(0, 3);
+
+  const items = [
+    ["Account", `<strong>${account.account_id}</strong><br>${account.customer_name}<br>Status: ${account.status}`],
+    ["Balances", `Bank Balance: <strong>L$${account.balance}</strong><br>Cash On Hand: L$${account.cash_on_hand}<br>Outstanding Fine: L$${account.outstanding_fine}<br>Loan Balance: L$${account.loan_balance}`],
+    ["Card", card ? `${card.card_id}<br>State: <strong>${card.state}</strong><br>${card.card_number}` : "No linked card"],
+    ["Obligations", `${fine ? `Fine: <strong>${fine.status}</strong> (${fine.reference})<br>` : "No active fine<br>"}${loan ? `Loan: <strong>${loan.status}</strong> (${loan.terms})` : "No active loan"}`],
+    ["Recent Activity", recent.length ? recent.map((item) => `${item.type} L$${item.amount} ${item.direction}`).join("<br>") : "No transactions found"],
+    ["Player Link", `Player ID: ${account.player_id || "-"}<br>Branch: ${account.branch_id || "-"}<br>Tenant: ${account.tenant_id || "-"}`]
+  ];
+
+  grid.innerHTML = items.map(([label, value]) => `
+    <div class="detail-card">
+      <div class="detail-label">${label}</div>
+      <div class="detail-value">${value}</div>
+    </div>
+  `).join("");
+  panel.classList.remove("hidden");
+}
+
 function applyStore(store) {
   state.store = store;
+  ensureSelectedAccount(store);
   state.incident = safeArray(store.vault_incidents)[0] || null;
   state.atmNetwork = buildAtmNetwork(store);
   renderTenant();
@@ -265,6 +335,7 @@ function renderTable(view) {
   const body = document.getElementById("table-body");
   const foot = document.getElementById("accounts-foot");
   const title = document.getElementById("view-title");
+  const searchShell = document.getElementById("search-shell");
   let columns = [];
   let rows = [];
 
@@ -280,7 +351,9 @@ function renderTable(view) {
   } else if (view === "accounts") {
     title.textContent = "Accounts";
     columns = ["Account ID", "Customer", "Balance", "Status", "Actions"];
-    rows = (store.accounts || []).map((account) => [
+    rows = (store.accounts || [])
+      .filter((account) => matchesSearch([account.account_id, account.customer_name, String(account.balance), account.status]))
+      .map((account) => [
       account.account_id,
       account.customer_name,
       { money: account.balance },
@@ -299,7 +372,9 @@ function renderTable(view) {
   } else if (view === "staff") {
     title.textContent = "Staff Users";
     columns = ["Username", "Avatar", "Role", "Status", "Actions"];
-    rows = safeArray(store.users).map((staffUser) => [
+    rows = safeArray(store.users)
+      .filter((staffUser) => matchesSearch([staffUser.username, staffUser.avatar_name || "", staffUser.role, staffUser.status]))
+      .map((staffUser) => [
       staffUser.username,
       staffUser.avatar_name || "-",
       prettyRole(staffUser.role),
@@ -316,7 +391,9 @@ function renderTable(view) {
   } else if (view === "cards") {
     title.textContent = "Cards";
     columns = ["Card ID", "Account", "State", "Actions"];
-    rows = safeArray(store.cards).map((card) => [
+    rows = safeArray(store.cards)
+      .filter((card) => matchesSearch([card.card_id, card.account_id, card.state, card.card_number || ""]))
+      .map((card) => [
       card.card_id,
       card.account_id,
       { chip: card.state, tone: card.state === "ACTIVE" ? "" : "alert" },
@@ -332,7 +409,9 @@ function renderTable(view) {
   } else if (view === "transactions") {
     title.textContent = "Transactions";
     columns = ["Type", "Account", "Amount", "Direction"];
-    rows = getTransactions(store).map((txn) => [
+    rows = getTransactions(store)
+      .filter((txn) => matchesSearch([txn.type, txn.account_id, String(txn.amount), txn.direction, txn.memo || ""]))
+      .map((txn) => [
       txn.type,
       txn.account_id,
       { money: txn.amount },
@@ -350,7 +429,9 @@ function renderTable(view) {
   } else if (view === "incidents") {
     title.textContent = "Incidents";
     columns = ["Incident ID", "Actor", "Stage", "State"];
-    rows = safeArray(store.vault_incidents).map((incident) => [
+    rows = safeArray(store.vault_incidents)
+      .filter((incident) => matchesSearch([incident.incident_id, incident.actor_name, incident.stage, incident.state]))
+      .map((incident) => [
       incident.incident_id,
       incident.actor_name,
       incident.stage,
@@ -361,11 +442,14 @@ function renderTable(view) {
     columns = ["Type", "Account", "Amount", "Memo"];
     rows = getTransactions(store)
       .filter((txn) => txn.type === "PAYROLL")
+      .filter((txn) => matchesSearch([txn.type, txn.account_id, String(txn.amount), txn.memo || ""]))
       .map((txn) => [txn.type, txn.account_id, { money: txn.amount }, txn.memo]);
   } else if (view === "fines") {
     title.textContent = "Fines";
     columns = ["Fine ID", "Account", "Amount", "Status", "Actions"];
-    rows = safeArray(store.fines).map((fine) => [
+    rows = safeArray(store.fines)
+      .filter((fine) => matchesSearch([fine.fine_id, fine.account_id, fine.reference, fine.status, String(fine.amount)]))
+      .map((fine) => [
       fine.fine_id,
       fine.account_id,
       { money: fine.amount },
@@ -379,7 +463,9 @@ function renderTable(view) {
   } else if (view === "loans") {
     title.textContent = "Loans";
     columns = ["Loan ID", "Account", "Balance", "Status", "Actions"];
-    rows = safeArray(store.loans).map((loan) => [
+    rows = safeArray(store.loans)
+      .filter((loan) => matchesSearch([loan.loan_id, loan.account_id, loan.terms, loan.status, String(loan.balance)]))
+      .map((loan) => [
       loan.loan_id,
       loan.account_id,
       { money: loan.balance },
@@ -393,7 +479,9 @@ function renderTable(view) {
   } else if (view === "atm-network") {
     title.textContent = "ATM Network";
     columns = ["ATM ID", "Branch", "Status", "Scope"];
-    rows = state.atmNetwork.map((atm) => [
+    rows = state.atmNetwork
+      .filter((atm) => matchesSearch([atm.id, atm.branch, atm.status, atm.scope]))
+      .map((atm) => [
       atm.id,
       atm.branch,
       { chip: atm.status, tone: atm.status === "ONLINE" ? "" : "alert" },
@@ -402,7 +490,9 @@ function renderTable(view) {
   } else if (view === "audit-logs") {
     title.textContent = "Audit Logs";
     columns = ["Action", "Actor", "Target", "Status"];
-    rows = safeArray(store.audit_logs).map((audit) => [
+    rows = safeArray(store.audit_logs)
+      .filter((audit) => matchesSearch([audit.action, audit.actor_name, audit.target_account_id || audit.object_id, audit.status]))
+      .map((audit) => [
       audit.action,
       audit.actor_name,
       audit.target_account_id || audit.object_id,
@@ -410,8 +500,11 @@ function renderTable(view) {
     ]);
   }
 
+  searchShell.classList.toggle("hidden", view === "bank-core" || view === "vault-control");
   head.innerHTML = "<tr>" + columns.map((column) => `<th>${column}</th>`).join("") + "</tr>";
-  body.innerHTML = rows.map((row) => "<tr>" + row.map((cell) => {
+  body.innerHTML = rows.map((row) => {
+    const isSelected = view === "accounts" && row[0] === state.selectedAccountId;
+    return `<tr class="${isSelected ? "selected-row" : ""}" data-select-account="${view === "accounts" ? row[0] : ""}">` + row.map((cell) => {
     if (cell && typeof cell === "object" && "money" in cell) {
       return `<td class="money">L$${cell.money}</td>`;
     }
@@ -424,9 +517,11 @@ function renderTable(view) {
       ).join("") : '<span class="dim-copy">No actions</span>'}</div></td>`;
     }
     return `<td>${cell}</td>`;
-  }).join("") + "</tr>").join("");
+  }).join("") + "</tr>";
+  }).join("");
   foot.textContent = "Showing " + rows.length + " records for " + title.textContent.toUpperCase();
   syncControlStates();
+  renderDetailPanel();
 }
 
 function setActiveView(view) {
@@ -854,7 +949,17 @@ function wireAuth() {
 }
 
 function wireAdminActions() {
+  document.getElementById("table-search").addEventListener("input", (event) => {
+    state.searchQuery = String(event.target.value || "").trim().toLowerCase();
+    renderTable(state.view);
+  });
+
   document.getElementById("table-body").addEventListener("click", async (event) => {
+    const row = event.target.closest("[data-select-account]");
+    if (row && row.dataset.selectAccount) {
+      state.selectedAccountId = row.dataset.selectAccount;
+      renderTable(state.view);
+    }
     const button = event.target.closest("[data-row-action]");
     if (!button) {
       return;
