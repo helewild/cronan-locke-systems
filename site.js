@@ -210,6 +210,7 @@ function closeActionModal(result = null) {
   document.getElementById("action-form-fields").innerHTML = "";
   document.getElementById("action-modal-copy").classList.add("hidden");
   document.getElementById("action-modal-copy").innerHTML = "";
+  document.querySelector("#action-modal .modal-card")?.classList.remove("wide");
   const resolver = actionModalResolver;
   actionModalResolver = null;
   if (resolver) {
@@ -220,6 +221,7 @@ function closeActionModal(result = null) {
 function openActionModal(config) {
   return new Promise((resolve) => {
     actionModalResolver = resolve;
+    document.querySelector("#action-modal .modal-card")?.classList.toggle("wide", Boolean(config.wide));
     document.getElementById("action-modal-title").textContent = config.title || "Action Form";
     document.getElementById("action-submit").textContent = config.submitLabel || "Submit";
     const copy = document.getElementById("action-modal-copy");
@@ -553,6 +555,153 @@ function getOrganizationHealth(store, organization) {
   return { label: "OPEN", tone: "dim" };
 }
 
+function getTotalDueFines(store) {
+  return safeArray(store.fines)
+    .filter((fine) => fine.status === "DUE")
+    .reduce((total, fine) => total + Number(fine.amount || 0), 0);
+}
+
+function getTotalActiveLoanBalance(store) {
+  return safeArray(store.loans)
+    .filter((loan) => loan.status === "ACTIVE")
+    .reduce((total, loan) => total + Number(loan.balance || 0), 0);
+}
+
+function getCustomerPortalUsers(store) {
+  return safeArray(store.users).filter((user) => user.role === "customer" && user.status === "ACTIVE").length;
+}
+
+function getActiveEmploymentCount(store) {
+  return safeArray(store.employments).filter((employment) => employment.status === "ACTIVE").length;
+}
+
+function getAtmHealthSummary(store) {
+  const atms = safeArray(store.atms);
+  const offline = atms.filter((atm) => atm.status !== "ONLINE").length;
+  return {
+    total: atms.length,
+    online: Math.max(0, atms.length - offline),
+    offline
+  };
+}
+
+function getOrganizationRiskSummary(store) {
+  return safeArray(store.organizations).reduce((summary, organization) => {
+    const health = getOrganizationHealth(store, organization);
+    if (health.label === "PAYROLL RISK") {
+      summary.payrollRisk += 1;
+    }
+    if (health.label === "UNDER RESERVE") {
+      summary.underReserve += 1;
+    }
+    if (health.label === "OVER BUDGET") {
+      summary.overBudget += 1;
+    }
+    if (organization.status === "ACTIVE") {
+      summary.active += 1;
+    }
+    return summary;
+  }, {
+    active: 0,
+    payrollRisk: 0,
+    underReserve: 0,
+    overBudget: 0
+  });
+}
+
+function getPayrollHealth(store) {
+  const employments = safeArray(store.employments).filter((employment) => employment.status === "ACTIVE");
+  if (!employments.length) {
+    return { label: "IDLE", tone: "dim", note: "No active jobs on record" };
+  }
+
+  const underfundedOrganizations = safeArray(store.organizations).filter((organization) => {
+    const treasury = safeArray(store.accounts).find((account) => account.account_id === organization.treasury_account_id);
+    return organization.status === "ACTIVE" && Number(treasury?.balance || 0) < getOrganizationPayrollBurden(store, organization.organization_id);
+  });
+
+  if (underfundedOrganizations.length) {
+    return {
+      label: "PAYROLL RISK",
+      tone: "alert",
+      note: `${underfundedOrganizations.length} organization(s) cannot fully fund the next payroll run`
+    };
+  }
+
+  return {
+    label: "FUNDED",
+    tone: "",
+    note: `${employments.length} active job(s) funded for the next payroll cycle`
+  };
+}
+
+function getBankCoreRows(store) {
+  const activeIncidentCount = safeArray(store.vault_incidents).filter((incident) => incident.state === "ACTIVE").length;
+  const riskSummary = getOrganizationRiskSummary(store);
+  const atmSummary = getAtmHealthSummary(store);
+  const payrollHealth = getPayrollHealth(store);
+  const customerPortals = getCustomerPortalUsers(store);
+  const activeAccounts = safeArray(store.accounts).filter((account) => account.status === "ACTIVE").length;
+  const dueFineCount = safeArray(store.fines).filter((fine) => fine.status === "DUE").length;
+  const activeLoanCount = safeArray(store.loans).filter((loan) => loan.status === "ACTIVE").length;
+  const payrollBurden = safeArray(store.organizations)
+    .filter((organization) => organization.status === "ACTIVE")
+    .reduce((total, organization) => total + getOrganizationPayrollBurden(store, organization.organization_id), 0);
+
+  return [
+    [
+      "Accounts",
+      "Customer banking and portal access",
+      { chip: activeAccounts ? "ONLINE" : "IDLE", tone: activeAccounts ? "" : "dim" },
+      `${activeAccounts} active account(s) / ${customerPortals} portal login(s)`,
+      `${safeArray(store.cards).length} card(s) issued and ${safeArray(store.transactions).length} transaction record(s) available`
+    ],
+    [
+      "Organizations",
+      "Business, department, and treasury network",
+      {
+        chip: riskSummary.payrollRisk || riskSummary.underReserve || riskSummary.overBudget ? "WATCH" : "FUNDED",
+        tone: riskSummary.payrollRisk || riskSummary.underReserve || riskSummary.overBudget ? "alert" : ""
+      },
+      `${riskSummary.active} active org(s) / ${riskSummary.payrollRisk} payroll risk / ${riskSummary.underReserve} under reserve`,
+      `${riskSummary.overBudget} over budget and L$${payrollBurden} total payroll burden`
+    ],
+    [
+      "Justice",
+      "Fines, collections, and enforcement",
+      { chip: dueFineCount ? "OUTSTANDING" : "CLEAR", tone: dueFineCount ? "alert" : "" },
+      `${dueFineCount} due fine(s) totaling L$${getTotalDueFines(store)}`,
+      dueFineCount ? "Collections queue is active and awaiting payment" : "No due fines are waiting for action"
+    ],
+    [
+      "Credit",
+      "Loans, balances, and repayment pressure",
+      { chip: activeLoanCount ? "SERVICING" : "IDLE", tone: activeLoanCount ? "" : "dim" },
+      `${activeLoanCount} active loan(s) / L$${getTotalActiveLoanBalance(store)} outstanding`,
+      activeLoanCount ? "Loan servicing is active across tenant accounts" : "No active loans are on the books"
+    ],
+    [
+      "Payroll",
+      "Employment wages and organization funding",
+      { chip: payrollHealth.label, tone: payrollHealth.tone },
+      `${getActiveEmploymentCount(store)} active job(s) / L$${payrollBurden} next-run burden`,
+      payrollHealth.note
+    ],
+    [
+      "Security",
+      "Vault incidents, dispatch, and ATM network",
+      {
+        chip: activeIncidentCount ? "ALERT" : (atmSummary.offline ? "DEGRADED" : "NORMAL"),
+        tone: activeIncidentCount ? "alert" : (atmSummary.offline ? "dim" : "")
+      },
+      `${activeIncidentCount} active incident(s) / ${atmSummary.offline} ATM(s) offline`,
+      activeIncidentCount
+        ? (state.incident?.stage || "Incident response active")
+        : (atmSummary.total ? `${atmSummary.online}/${atmSummary.total} ATM(s) online` : "No ATM network records configured")
+    ]
+  ];
+}
+
 function ensureSelectedAccount(store) {
   const accounts = safeArray(store.accounts);
   if (!accounts.length) {
@@ -788,14 +937,15 @@ function renderTable(view) {
       ]);
   } else if (view === "bank-core") {
     title.textContent = "Bank Core";
-    columns = ["Module", "Scope", "Health", "Note"];
-    rows = [
-      ["Accounts", "Customer banking", "ONLINE", "Balances, cards, and statements available"],
-      ["Organizations", "Business and department treasury", "ONLINE", `${safeArray(store.organizations).length} treasury organization(s) active`],
-      ["Justice", "Fines and enforcement", "ONLINE", "Fine collection and records active"],
-      ["Credit", "Loans and lending", "ONLINE", "Outstanding loan servicing enabled"],
-      ["Security", "Vault and dispatch", state.incident ? "ALERT" : "ONLINE", state.incident ? state.incident.stage : "No incident"]
-    ];
+    columns = ["Module", "Scope", "Health", "Live Signal", "Operator Note"];
+    rows = getBankCoreRows(store)
+      .filter((row) => matchesSearch([
+        row[0],
+        row[1],
+        typeof row[2] === "object" ? row[2].chip : row[2],
+        row[3],
+        row[4]
+      ]));
   } else if (view === "accounts") {
     title.textContent = "Accounts";
     columns = ["Account ID", "Customer", "Balance", "Status", "Actions"];
@@ -1038,7 +1188,7 @@ function renderTable(view) {
     ]);
   }
 
-  searchShell.classList.toggle("hidden", view === "bank-core" || view === "vault-control");
+  searchShell.classList.toggle("hidden", view === "vault-control");
   head.innerHTML = "<tr>" + columns.map((column) => `<th>${column}</th>`).join("") + "</tr>";
   body.innerHTML = rows.map((row) => {
     const isSelected = view === "accounts" && row[0] === state.selectedAccountId;
@@ -1238,6 +1388,7 @@ async function runAccountAction(kind, accountId) {
     const values = await openActionModal({
       title: "Create Customer Account",
       submitLabel: "Create Account",
+      wide: true,
       fields: [
         { name: "avatar_name", label: "Customer Avatar Or Display Name", required: true, value: "" },
         { name: "opening_deposit", label: "Opening Deposit", type: "number", required: true, value: "0" },
@@ -1507,6 +1658,7 @@ async function runOrganizationAction(kind, organizationId) {
     const values = await openActionModal({
       title: "Create Organization",
       submitLabel: "Create Organization",
+      wide: true,
       fields
     });
     if (!values) {
@@ -1606,6 +1758,7 @@ async function runOrganizationAction(kind, organizationId) {
       title: "Transfer Treasury Funds",
       submitLabel: "Transfer Funds",
       copy: `<strong>Source:</strong> ${organization.name}`,
+      wide: true,
       fields: [
         {
           name: "target_organization_id",
@@ -1654,6 +1807,7 @@ async function runOrganizationAction(kind, organizationId) {
     const values = await openActionModal({
       title: "Edit Organization",
       submitLabel: "Save Changes",
+      wide: true,
       fields: [
         { name: "name", label: "Organization Or Department Name", required: true, value: organization.name || "" },
         { name: "organization_type", label: "Organization Type", type: "select", required: true, value: organization.organization_type || "BUSINESS", options: ["BUSINESS", "GOVERNMENT", "DEPARTMENT", "NONPROFIT"] },
@@ -1728,6 +1882,7 @@ async function runEmploymentAction(kind, employmentId) {
     const values = await openActionModal({
       title: "Create Employment Record",
       submitLabel: "Create Job",
+      wide: true,
       fields: [
         { name: "account_id", label: "Account ID", required: true, value: state.selectedAccountId || "" },
         { name: "organization_id", label: "Organization", type: "select", value: organizations[0]?.organization_id || "", options: [{ value: "", label: "None / manual employer" }, ...organizations.map((item) => ({ value: item.organization_id, label: `${item.organization_id} - ${item.name}` }))] },
@@ -1781,6 +1936,7 @@ async function runEmploymentAction(kind, employmentId) {
     const values = await openActionModal({
       title: "Edit Employment Record",
       submitLabel: "Save Job",
+      wide: true,
       fields: [
         { name: "organization_id", label: "Organization", type: "select", value: employment.organization_id || "", options: [{ value: "", label: "None / manual employer" }, ...organizations.map((item) => ({ value: item.organization_id, label: `${item.organization_id} - ${item.name}` }))] },
         { name: "employer_name", label: "Employer Or Business Name", required: true, value: employment.employer_name || "" },
@@ -1855,6 +2011,7 @@ async function runTenantAction(kind, tenantId) {
     const values = await openActionModal({
       title: "Edit Tenant",
       submitLabel: "Save Tenant",
+      wide: true,
       fields: [
         { name: "tenant_name", label: "Tenant Display Name", required: true, value: tenant.name || "" },
         { name: "bank_name", label: "Bank Display Name", required: true, value: tenant.bank_name || "" },
@@ -2201,6 +2358,7 @@ function wireAdminActions() {
       const values = await openActionModal({
         title: "Create Tenant",
         submitLabel: "Create Tenant",
+        wide: true,
         fields: [
           { name: "tenant_name", label: "Tenant Display Name", required: true, value: "" },
           { name: "bank_name", label: "Bank Display Name", required: true, value: "" },
@@ -2229,6 +2387,7 @@ function wireAdminActions() {
     const values = await openActionModal({
       title: "Manage Tenant",
       submitLabel: "Save Tenant Settings",
+      wide: true,
       fields: [
         { name: "tenant_name", label: "Tenant Display Name", required: true, value: tenant?.name || "" },
         { name: "bank_name", label: "Bank Display Name", required: true, value: tenant?.bank_name || "" },
@@ -2261,6 +2420,7 @@ function wireAdminActions() {
       const values = await openActionModal({
         title: "Create Tenant",
         submitLabel: "Create Tenant",
+        wide: true,
         fields: [
           { name: "tenant_name", label: "Tenant Display Name", required: true, value: "" },
           { name: "bank_name", label: "Bank Display Name", required: true, value: "" },

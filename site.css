@@ -492,6 +492,10 @@ th { color: var(--text-dim); font-size: 12px; text-transform: uppercase; font-we
   z-index: 1;
 }
 
+.modal-card.wide {
+  width: min(100%, 780px);
+}
+
 #action-form-fields {
   max-height: min(68vh, 620px);
   overflow: auto;
