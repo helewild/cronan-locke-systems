@@ -242,6 +242,16 @@ function openActionModal(config) {
   });
 }
 
+async function confirmAction(title, body, submitLabel = "Confirm") {
+  const values = await openActionModal({
+    title,
+    submitLabel,
+    copy: body,
+    fields: []
+  });
+  return values !== null;
+}
+
 function setBridgeMode(label) {
   const node = document.getElementById("bridge-mode");
   if (!node) {
@@ -1690,7 +1700,11 @@ async function runOrganizationAction(kind, organizationId) {
   }
 
   const nextAction = kind === "reactivate-organization" ? "reactivate_organization" : "deactivate_organization";
-  const confirmed = window.confirm(`${kind === "reactivate-organization" ? "Reactivate" : "Deactivate"} ${organization.name}?`);
+  const confirmed = await confirmAction(
+    kind === "reactivate-organization" ? "Reactivate Organization" : "Deactivate Organization",
+    `${kind === "reactivate-organization" ? "Bring" : "Take"} <strong>${organization.name}</strong> ${kind === "reactivate-organization" ? "back online" : "offline"}.`,
+    kind === "reactivate-organization" ? "Reactivate" : "Deactivate"
+  );
   if (!confirmed) {
     addLog(`Organization ${kind === "reactivate-organization" ? "reactivation" : "deactivation"} canceled.`);
     return;
@@ -1748,7 +1762,7 @@ async function runEmploymentAction(kind, employmentId) {
       return;
     }
     applyStore(result.store);
-    addLog(result.message || `Employment created for ${accountId.trim()}.`);
+    addLog(result.message || `Employment created for ${String(values.account_id || "").trim()}.`);
     return;
   }
 
@@ -1805,7 +1819,11 @@ async function runEmploymentAction(kind, employmentId) {
   }
 
   if (kind === "terminate-employment") {
-    const confirmed = window.confirm(`Terminate employment ${employmentId}?`);
+    const confirmed = await confirmAction(
+      "Terminate Employment",
+      `Terminate employment record <strong>${employmentId}</strong>?`,
+      "Terminate"
+    );
     if (!confirmed) {
       addLog(`Employment termination canceled for ${employmentId}.`);
       return;
@@ -1876,7 +1894,11 @@ async function runTenantAction(kind, tenantId) {
   };
 
   if (kind === "delete-tenant") {
-    const confirmed = window.confirm(`Delete tenant ${tenantId}? This permanently removes its users, accounts, cards, incidents, audit logs, licenses, and other linked data.`);
+    const confirmed = await confirmAction(
+      "Delete Tenant",
+      `Delete tenant <strong>${tenantId}</strong>? This permanently removes its users, accounts, cards, incidents, audit logs, licenses, and linked data.`,
+      "Delete Tenant"
+    );
     if (!confirmed) {
       addLog(`Delete canceled for ${tenantId}.`);
       return;
@@ -1884,7 +1906,11 @@ async function runTenantAction(kind, tenantId) {
   }
 
   if (kind === "expire-license") {
-    const confirmed = window.confirm(`Expire the license for ${tenantId} now? Tenant users will be blocked from logging in until the license is reactivated or extended.`);
+    const confirmed = await confirmAction(
+      "Expire License",
+      `Expire the license for <strong>${tenantId}</strong> now? Tenant users will be blocked from logging in until the license is reactivated or extended.`,
+      "Expire License"
+    );
     if (!confirmed) {
       addLog(`License expiry canceled for ${tenantId}.`);
       return;
