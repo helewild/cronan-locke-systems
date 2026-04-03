@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Cronan &amp; Locke Systems</title>
-    <link rel="stylesheet" href="./site.css?v=20260403d">
+    <link rel="stylesheet" href="./site.css?v=20260403e">
   </head>
   <body>
     <div class="machine">
@@ -13,13 +13,13 @@
           <main class="auth-main">
             <section class="forms-panel panel">
               <div class="tab-row">
-                <button id="login-tab" class="tab-button active" type="button">Owner Login</button>
+                <button id="login-tab" class="tab-button active" type="button">Portal Login</button>
                 <button id="setup-tab" class="tab-button" type="button">First-Time Setup</button>
               </div>
 
               <section id="login-card" class="login-card">
                 <div class="form-title">Secure Login</div>
-                <p class="form-copy">Tenant owners and authorized admins must sign in before the terminal is revealed.</p>
+                <p class="form-copy">Owners, staff, and account holders sign in here. Admin users enter the terminal; customers enter their banking portal.</p>
                 <form id="login-form" class="form-block">
                   <label>Username<input id="login-username" name="username" autocomplete="username" required></label>
                   <label>Password<input id="login-password" name="password" type="password" autocomplete="current-password" required></label>
@@ -175,6 +175,86 @@
           </main>
         </section>
 
+        <section id="player-shell" class="admin-shell hidden player-shell">
+          <aside class="sidebar panel">
+            <section class="bank-crest panel">
+              <div id="player-crest-shield" class="shield">CL</div>
+              <div id="player-crest-subtitle" class="bank-subtitle">CRONAN &amp; LOCKE</div>
+              <div id="player-crest-title" class="bank-title">BANKING</div>
+            </section>
+
+            <section class="tenant-card panel">
+              <div class="side-label">Customer Portal</div>
+              <div id="player-tenant-name" class="tenant-name">Loading...</div>
+              <div id="player-tenant-bank" class="tenant-bank">Loading...</div>
+            </section>
+
+            <section class="status-panel panel">
+              <div class="side-label">Authenticated Player</div>
+              <div id="player-username" class="status-highlight">CUSTOMER</div>
+              <div id="player-role" class="status-copy">ACCOUNT HOLDER</div>
+              <div class="system-note">
+                <div id="player-status-line-1">PORTAL: ONLINE</div>
+                <div id="player-status-line-2">ACCOUNT: READY</div>
+                <div id="player-status-line-3">MODE: VPS API</div>
+              </div>
+              <button id="player-logout-btn" type="button" class="ghost-button space-top">Logout</button>
+            </section>
+          </aside>
+
+          <main class="main panel">
+            <section class="header panel">
+              <div class="header-title">CRONAN &amp; LOCKE SYSTEMS</div>
+              <div class="header-status">
+                <div><strong>PLAYER BANKING PORTAL - ONLINE</strong></div>
+                <div id="player-header-user-line">USERNAME: CUSTOMER</div>
+                <div id="player-clock-line">DATE: --/--/---- TIME: --:--</div>
+              </div>
+            </section>
+
+            <div class="section-bar">Authenticated Player Portal</div>
+
+            <section class="metrics player-metrics">
+              <article class="metric-box panel"><div class="metric-name">Account</div><div id="player-metric-account" class="metric-value">-</div></article>
+              <article class="metric-box panel"><div class="metric-name">Balance</div><div id="player-metric-balance" class="metric-value">L$0</div></article>
+              <article class="metric-box panel"><div class="metric-name">Cards</div><div id="player-metric-cards" class="metric-value">0</div></article>
+              <article class="metric-box panel"><div class="metric-name">Due Fines</div><div id="player-metric-fines" class="metric-value">0</div></article>
+              <article class="metric-box panel"><div class="metric-name">Active Loans</div><div id="player-metric-loans" class="metric-value">0</div></article>
+              <article class="metric-box panel"><div class="metric-name">Employment</div><div id="player-metric-employment" class="metric-value">NONE</div></article>
+            </section>
+
+            <section class="work">
+              <section class="accounts-panel panel">
+                <div class="terminal-title">Account Summary</div>
+                <div id="player-summary-grid" class="detail-grid"></div>
+
+                <div class="terminal-title space-top">Recent Transactions</div>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Type</th>
+                      <th>Amount</th>
+                      <th>Direction</th>
+                      <th>Memo</th>
+                    </tr>
+                  </thead>
+                  <tbody id="player-transactions-body"></tbody>
+                </table>
+              </section>
+
+              <section class="incident-panel panel">
+                <div id="player-portal-banner" class="alert-box status-ok">[OK] ACCOUNT SERVICES AVAILABLE</div>
+                <div class="incident-grid">
+                  <div class="incident-line"><div class="k">Card</div><div id="player-card-state" class="v">-</div></div>
+                  <div class="incident-line"><div class="k">Fine Status</div><div id="player-fine-state" class="v">NONE</div></div>
+                  <div class="incident-line"><div class="k">Loan Status</div><div id="player-loan-state" class="v">NONE</div></div>
+                  <div class="incident-line"><div class="k">Employment</div><div id="player-job-state" class="v small">UNLINKED</div></div>
+                </div>
+              </section>
+            </section>
+          </main>
+        </section>
+
         <section id="staff-modal" class="modal-shell hidden" aria-hidden="true">
           <div class="modal-backdrop" data-close-modal="staff"></div>
           <div class="modal-card panel">
@@ -206,7 +286,7 @@
       </div>
     </div>
 
-    <script src="./site-config.js?v=20260403d"></script>
-    <script src="./site.js?v=20260403d"></script>
+    <script src="./site-config.js?v=20260403e"></script>
+    <script src="./site.js?v=20260403e"></script>
   </body>
 </html>

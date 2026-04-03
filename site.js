@@ -62,6 +62,10 @@ const VIEW_PERMISSIONS = {
   "audit-logs": "view_audit_logs"
 };
 
+function isCustomerSession() {
+  return state.session?.role === "customer";
+}
+
 function safeArray(value) {
   return Array.isArray(value) ? value : [];
 }
@@ -75,6 +79,17 @@ function setClock(targetId) {
   const text = "DATE: " + (now.getMonth() + 1) + "/" + now.getDate() + "/" + now.getFullYear()
     + " TIME: " + now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   document.getElementById(targetId).textContent = text;
+}
+
+function updateClockDisplays() {
+  const adminClock = document.getElementById("clock-line");
+  if (adminClock) {
+    setClock("clock-line");
+  }
+  const playerClock = document.getElementById("player-clock-line");
+  if (playerClock) {
+    setClock("player-clock-line");
+  }
 }
 
 function savePreviewState() {
@@ -547,8 +562,73 @@ function getCurrentTenant() {
   return safeArray(state.store?.tenants)[0] || null;
 }
 
+function renderPlayerPortal() {
+  const store = state.store || {};
+  const tenant = store.tenant || null;
+  const account = store.account || null;
+  const cards = safeArray(store.cards);
+  const fines = safeArray(store.fines);
+  const loans = safeArray(store.loans);
+  const transactions = safeArray(store.transactions).slice(0, 8);
+  const employment = safeArray(store.employments).find((item) => item.status === "ACTIVE") || null;
+
+  document.getElementById("player-tenant-name").textContent = (tenant?.name || "NO TENANT").toUpperCase();
+  document.getElementById("player-tenant-bank").textContent = (tenant?.bank_name || "NO BANK").toUpperCase();
+  document.getElementById("player-username").textContent = (state.session?.username || "CUSTOMER").toUpperCase();
+  document.getElementById("player-role").textContent = "ACCOUNT HOLDER";
+  document.getElementById("player-header-user-line").textContent = "USERNAME: " + (state.session?.username || "CUSTOMER").toUpperCase();
+  const bankParts = splitBankDisplay(tenant?.bank_name || "Customer Banking");
+  document.getElementById("player-crest-shield").textContent = initialsFromName(tenant?.bank_name || "Customer");
+  document.getElementById("player-crest-subtitle").textContent = bankParts[0];
+  document.getElementById("player-crest-title").textContent = bankParts[1];
+
+  document.getElementById("player-metric-account").textContent = account?.account_id || "-";
+  document.getElementById("player-metric-balance").textContent = `L$${Number(account?.balance || 0)}`;
+  document.getElementById("player-metric-cards").textContent = String(cards.length);
+  document.getElementById("player-metric-fines").textContent = String(fines.filter((item) => item.status === "DUE").length);
+  document.getElementById("player-metric-loans").textContent = String(loans.filter((item) => item.status === "ACTIVE").length);
+  document.getElementById("player-metric-employment").textContent = employment ? employment.title.toUpperCase() : "NONE";
+
+  const summaryItems = [
+    ["Account", `<strong>${account?.account_id || "-"}</strong><br>${account?.customer_name || "-"}<br>Status: ${account?.status || "UNKNOWN"}`],
+    ["Balances", `Bank Balance: <strong>L$${Number(account?.balance || 0)}</strong><br>Cash On Hand: L$${Number(account?.cash_on_hand || 0)}<br>Outstanding Fine: L$${Number(account?.outstanding_fine || 0)}<br>Loan Balance: L$${Number(account?.loan_balance || 0)}`],
+    ["Cards", cards.length ? cards.map((card) => `${card.card_id}<br>State: <strong>${card.state}</strong><br>${card.card_number}`).join("<br><br>") : "No active cards"],
+    ["Employment", employment ? `${employment.title}<br>${employment.employer_name}<br>Pay Rate: <strong>L$${employment.pay_rate}</strong><br>Cycle: ${employment.pay_cycle}` : "No active employment"],
+    ["Obligations", `${fines.length ? fines.map((fine) => `Fine ${fine.reference}: <strong>${fine.status}</strong> L$${fine.amount}`).join("<br>") : "No active fines"}<br><br>${loans.length ? loans.map((loan) => `Loan ${loan.loan_id}: <strong>${loan.status}</strong> L$${loan.balance}`).join("<br>") : "No active loans"}`]
+  ];
+  document.getElementById("player-summary-grid").innerHTML = summaryItems.map(([label, value]) => `
+    <div class="detail-card">
+      <div class="detail-label">${label}</div>
+      <div class="detail-value">${value}</div>
+    </div>
+  `).join("");
+
+  document.getElementById("player-transactions-body").innerHTML = transactions.length
+    ? transactions.map((txn) => `
+      <tr>
+        <td>${txn.type}</td>
+        <td class="money">L$${Number(txn.amount || 0)}</td>
+        <td><span class="chip ${txn.direction === "OUT" ? "alert" : ""}">${txn.direction}</span></td>
+        <td>${txn.memo || "-"}</td>
+      </tr>
+    `).join("")
+    : `<tr><td colspan="4" class="dim-copy">No transactions available.</td></tr>`;
+
+  document.getElementById("player-card-state").textContent = cards.length ? cards.map((item) => item.state).join(", ") : "NONE";
+  document.getElementById("player-fine-state").textContent = fines.some((item) => item.status === "DUE") ? "PAYMENT DUE" : "CLEAR";
+  document.getElementById("player-loan-state").textContent = loans.some((item) => item.status === "ACTIVE") ? "ACTIVE" : "NONE";
+  document.getElementById("player-job-state").textContent = employment ? `${employment.title} / ${employment.employer_name}` : "UNLINKED";
+  document.getElementById("player-status-line-1").textContent = "PORTAL: ONLINE";
+  document.getElementById("player-status-line-2").textContent = `ACCOUNT: ${account?.status || "UNKNOWN"}`;
+  document.getElementById("player-status-line-3").textContent = "MODE: " + (CONFIG.siteMode === "vps" ? "VPS API" : (CONFIG.apiUrl ? "APPS SCRIPT BRIDGE" : "STATIC PREVIEW"));
+}
+
 function applyStore(store) {
   state.store = store;
+  if (isCustomerSession()) {
+    renderPlayerPortal();
+    return;
+  }
   ensureSelectedAccount(store);
   state.incident = safeArray(store.vault_incidents)[0] || null;
   state.atmNetwork = buildAtmNetwork(store);
@@ -661,9 +741,9 @@ function renderTable(view) {
       { chip: account.status, tone: account.status === "ACTIVE" ? "" : "dim" },
       {
         actions: [
-          { label: "New Account", kind: "create-account", permission: "create_customer_account" },
           { label: "Deposit", kind: "deposit", accountId: account.account_id, permission: "deposit_account" },
           { label: "Withdraw", kind: "withdraw", accountId: account.account_id, permission: "withdraw_account" },
+          { label: "Portal Access", kind: "create-customer-portal", accountId: account.account_id, permission: "create_customer_portal_user" },
           account.status === "ACTIVE"
             ? { label: "Freeze", kind: "freeze", accountId: account.account_id, tone: "danger", permission: "freeze_account" }
             : { label: "Unfreeze", kind: "unfreeze", accountId: account.account_id, permission: "unfreeze_account" }
@@ -957,12 +1037,18 @@ function applySession(session) {
   state.session = session;
   saveSession(session);
   document.getElementById("auth-shell").classList.add("hidden");
-  document.getElementById("admin-shell").classList.remove("hidden");
+  document.getElementById("admin-shell").classList.toggle("hidden", isCustomerSession());
+  document.getElementById("player-shell").classList.toggle("hidden", !isCustomerSession());
+  if (isCustomerSession()) {
+    document.getElementById("admin-shell").classList.add("hidden");
+  } else {
+    document.getElementById("player-shell").classList.add("hidden");
+  }
   document.getElementById("manage-tenant-btn").textContent = session.role === "platform_admin" ? "New Tenant" : "Manage Tenant";
   document.getElementById("admin-username").textContent = session.username.toUpperCase();
   document.getElementById("admin-role").textContent = (session.role || "tenant_owner").toUpperCase().replaceAll("_", " ");
   document.getElementById("header-user-line").textContent = "USERNAME: " + session.username.toUpperCase();
-  setClock("clock-line");
+  updateClockDisplays();
   document.querySelectorAll(".nav-link").forEach((link) => {
     link.classList.toggle("hidden", !canAccessView(link.dataset.view));
   });
@@ -1017,6 +1103,7 @@ function logout(message) {
   state.session = null;
   clearSession();
   document.getElementById("admin-shell").classList.add("hidden");
+  document.getElementById("player-shell").classList.add("hidden");
   document.getElementById("auth-shell").classList.remove("hidden");
   setAuthMessage(message || "Session closed. Login required to access the admin terminal.");
 }
@@ -1098,6 +1185,40 @@ async function runAccountAction(kind, accountId) {
     }
     applyStore(result.store);
     addLog(result.message || `Created account for ${avatarName.trim()}.`);
+    return;
+  }
+
+  if (kind === "create-customer-portal") {
+    if (!accountId) {
+      addLog("Missing account id for portal access.");
+      return;
+    }
+    const account = safeArray(state.store?.accounts).find((item) => item.account_id === accountId);
+    if (!account) {
+      addLog("Account record not found.");
+      return;
+    }
+    const username = window.prompt(`Portal username for ${account.customer_name}:`, account.customer_name.toLowerCase().replace(/\s+/g, ""));
+    if (!username || !username.trim()) {
+      addLog("Customer portal creation canceled.");
+      return;
+    }
+    const password = window.prompt("Temporary portal password:", "changeme123");
+    if (!password) {
+      addLog("Customer portal creation canceled.");
+      return;
+    }
+    const result = await runAdminAction("create_customer_portal_user", {
+      account_id: accountId,
+      new_username: username.trim(),
+      new_password: password
+    });
+    if (!result.ok) {
+      addLog(result.error || "Customer portal access creation failed.");
+      return;
+    }
+    applyStore(result.store);
+    addLog(`Customer portal created for ${account.customer_name}. Username: ${username.trim()} Temp Password: ${password}`);
     return;
   }
 
@@ -1886,7 +2007,7 @@ function wireAuth() {
 
     setAuthMessage("Login accepted. Opening admin terminal.");
     applySession(result.session);
-    setInterval(() => setClock("clock-line"), 1000);
+    setInterval(updateClockDisplays, 1000);
   });
 
   document.getElementById("setup-form").addEventListener("submit", async (event) => {
@@ -1933,7 +2054,7 @@ function wireAdminActions() {
       return;
     }
     const kind = button.dataset.rowAction;
-    if (["create-account", "deposit", "withdraw", "freeze", "unfreeze"].includes(kind)) {
+    if (["create-account", "create-customer-portal", "deposit", "withdraw", "freeze", "unfreeze"].includes(kind)) {
       await runAccountAction(kind, button.dataset.accountId);
       return;
     }
@@ -2159,6 +2280,7 @@ function wireAdminActions() {
   });
 
   document.getElementById("logout-btn").addEventListener("click", logout);
+  document.getElementById("player-logout-btn").addEventListener("click", logout);
   document.getElementById("staff-role").addEventListener("change", updateStaffRoleHint);
   document.getElementById("staff-form").addEventListener("submit", submitStaffCreate);
   document.getElementById("staff-cancel").addEventListener("click", closeStaffModal);
@@ -2228,7 +2350,7 @@ async function boot() {
           state.store = result.store;
         }
         applySession(result.session || session);
-        setInterval(() => setClock("clock-line"), 1000);
+        setInterval(updateClockDisplays, 1000);
         return;
       }
       handleSessionFailure(result.error || "Saved session is no longer valid.");

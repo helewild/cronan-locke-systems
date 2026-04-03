@@ -32,6 +32,7 @@ export const STORE_TABLES = [
       "username",
       "password_hash",
       "role",
+      "linked_account_id",
       "avatar_name",
       "status",
       "session_token",
@@ -40,6 +41,7 @@ export const STORE_TABLES = [
     ],
     booleanColumns: ["must_reset_password"],
     defaults: {
+      linked_account_id: "",
       must_reset_password: false
     }
   },
@@ -267,6 +269,7 @@ export const CREATE_TABLE_STATEMENTS = [
     username TEXT NOT NULL UNIQUE,
     password_hash TEXT NOT NULL,
     role TEXT NOT NULL,
+    linked_account_id TEXT,
     avatar_name TEXT,
     status TEXT NOT NULL,
     session_token TEXT,
@@ -421,4 +424,6 @@ export const CREATE_TABLE_STATEMENTS = [
   `ALTER TABLE licenses ADD COLUMN IF NOT EXISTS setup_box_key TEXT`,
   `ALTER TABLE licenses ADD COLUMN IF NOT EXISTS renewed_at TIMESTAMPTZ`,
   `ALTER TABLE licenses ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ`
+  ,
+  `ALTER TABLE users ADD COLUMN IF NOT EXISTS linked_account_id TEXT`
 ];

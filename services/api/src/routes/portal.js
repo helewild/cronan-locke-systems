@@ -72,6 +72,7 @@ const ROLE_PERMISSIONS = {
     "enable_staff_user",
     "reset_staff_session",
     "create_customer_account",
+    "create_customer_portal_user",
     "deposit_account",
     "withdraw_account",
     "freeze_account",
@@ -117,6 +118,7 @@ const ROLE_PERMISSIONS = {
     "update_employment",
     "terminate_employment",
     "create_customer_account",
+    "create_customer_portal_user",
     "deposit_account",
     "withdraw_account",
     "freeze_account",
@@ -143,6 +145,7 @@ const ROLE_PERMISSIONS = {
     "view_payroll",
     "view_audit_logs",
     "create_customer_account",
+    "create_customer_portal_user",
     "create_organization",
     "update_organization",
     "deactivate_organization",
@@ -171,6 +174,7 @@ const ROLE_PERMISSIONS = {
     "view_fines",
     "view_loans",
     "create_customer_account",
+    "create_customer_portal_user",
     "deposit_account",
     "withdraw_account",
     "lock_card",
@@ -187,6 +191,13 @@ const ROLE_PERMISSIONS = {
     "dispatch_police",
     "lock_vault",
     "shutdown_atm_network"
+  ],
+  customer: [
+    "view_player_portal",
+    "view_cards",
+    "view_transactions",
+    "view_fines",
+    "view_loans"
   ]
 };
 
@@ -262,6 +273,36 @@ function buildTenantStore(store, tenantId) {
     branches: (store.branches || []).filter((item) => item.tenant_id === tenantId),
     regions: (store.regions || []).filter((item) => item.tenant_id === tenantId),
     atms: (store.atms || []).filter((item) => item.tenant_id === tenantId)
+  };
+}
+
+function buildCustomerStore(store, user) {
+  const tenantId = user.tenant_id;
+  const account = findAccount(store, tenantId, user.linked_account_id);
+  if (!account) {
+    throw new Error("Linked customer account not found.");
+  }
+
+  const tenant = findTenant(store, tenantId);
+  const cards = (store.cards || []).filter((item) => item.account_id === account.account_id);
+  const fines = (store.fines || []).filter((item) => item.account_id === account.account_id);
+  const loans = (store.loans || []).filter((item) => item.account_id === account.account_id);
+  const transactions = (store.transactions || []).filter((item) => item.account_id === account.account_id);
+  const employments = (store.employments || []).filter((item) => item.account_id === account.account_id);
+  const organizations = (store.organizations || []).filter((item) =>
+    employments.some((job) => job.organization_id && job.organization_id === item.organization_id)
+  );
+
+  return {
+    scope_mode: "player",
+    tenant: tenant ? { ...tenant } : null,
+    account: { ...account },
+    cards: cards.map((item) => ({ ...item })),
+    fines: fines.map((item) => ({ ...item })),
+    loans: loans.map((item) => ({ ...item })),
+    transactions: transactions.map((item) => ({ ...item })),
+    employments: employments.map((item) => ({ ...item })),
+    organizations: organizations.map((item) => ({ ...item }))
   };
 }
 
@@ -536,10 +577,11 @@ async function login(store, payload) {
       role: user.role,
       tenant_id: user.tenant_id,
       token: user.session_token,
+      linked_account_id: user.linked_account_id || "",
       permissions: buildPermissions(user.role),
       must_reset_password: Boolean(user.must_reset_password)
     },
-    store: buildTenantStore(store, user.tenant_id)
+    store: user.role === "customer" ? buildCustomerStore(store, user) : buildTenantStore(store, user.tenant_id)
   };
 }
 
@@ -570,6 +612,7 @@ async function activateOwner(store, payload) {
     username: payload.username,
     password_hash: hashPassword(payload.password),
     role: "tenant_owner",
+    linked_account_id: "",
     avatar_name: payload.avatar_name || "",
     status: "ACTIVE",
     session_token: "",
@@ -621,10 +664,11 @@ function dashboard(store, payload) {
       role: user.role,
       tenant_id: user.tenant_id,
       token: user.session_token,
+      linked_account_id: user.linked_account_id || "",
       permissions: buildPermissions(user.role),
       must_reset_password: Boolean(user.must_reset_password)
     },
-    store: buildTenantStore(store, user.tenant_id)
+    store: user.role === "customer" ? buildCustomerStore(store, user) : buildTenantStore(store, user.tenant_id)
   };
 }
 
@@ -1314,10 +1358,11 @@ async function changePassword(store, payload) {
       role: user.role,
       tenant_id: user.tenant_id,
       token: user.session_token,
+      linked_account_id: user.linked_account_id || "",
       permissions: buildPermissions(user.role),
       must_reset_password: false
     },
-    store: buildTenantStore(store, user.tenant_id)
+    store: user.role === "customer" ? buildCustomerStore(store, user) : buildTenantStore(store, user.tenant_id)
   };
 }
 
@@ -1341,6 +1386,7 @@ function createStaffUser(store, actorUser, actorName, payload) {
     username,
     password_hash: hashPassword(password),
     role: resolved.role,
+    linked_account_id: "",
     avatar_name: avatarName,
     status: "ACTIVE",
     session_token: "",
@@ -1350,6 +1396,45 @@ function createStaffUser(store, actorUser, actorName, payload) {
 
   store.users.push(user);
   appendPortalAudit(store, actorName, resolved.tenantId, "user", user.user_id, null, "staff_user_create", 0, "Created " + resolved.role + " user " + username);
+}
+
+function createCustomerPortalUser(store, tenantId, actorName, payload) {
+  const accountId = String(payload.account_id || "").trim();
+  const username = String(payload.new_username || "").trim();
+  const password = String(payload.new_password || "");
+
+  if (!accountId || !username || !password) {
+    throw new Error("Account, username, and password are required.");
+  }
+
+  const account = findAccount(store, tenantId, accountId);
+  if (!account) {
+    throw new Error("Linked account not found.");
+  }
+  if ((store.users || []).some((item) => String(item.username || "").trim().toLowerCase() === username.toLowerCase())) {
+    throw new Error("Username already exists.");
+  }
+  if ((store.users || []).some((item) => item.tenant_id === tenantId && item.role === "customer" && item.linked_account_id === accountId)) {
+    throw new Error("This account already has portal access.");
+  }
+
+  const nextNumber = (store.users || []).length + 10001;
+  const user = {
+    user_id: "USR-" + String(nextNumber),
+    tenant_id: tenantId,
+    username,
+    password_hash: hashPassword(password),
+    role: "customer",
+    linked_account_id: accountId,
+    avatar_name: account.customer_name,
+    status: "ACTIVE",
+    session_token: "",
+    session_expires_at: "",
+    must_reset_password: true
+  };
+
+  store.users.push(user);
+  appendPortalAudit(store, actorName, tenantId, "user", user.user_id, accountId, "customer_portal_create", 0, "Created customer portal access for " + account.customer_name);
 }
 
 function updateStaffStatus(store, tenantId, actorName, userId, nextStatus) {
@@ -1835,6 +1920,10 @@ async function adminAction(store, payload) {
       requirePermission(user, "create_customer_account");
       createCustomerAccount(store, user.tenant_id, actorName, payload);
       break;
+    case "create_customer_portal_user":
+      requirePermission(user, "create_customer_portal_user");
+      createCustomerPortalUser(store, user.tenant_id, actorName, payload);
+      break;
     case "create_organization":
       requirePermission(user, "create_organization");
       createOrganization(store, resolveOrganizationTenantId(store, user, payload), actorName, payload);
@@ -1911,7 +2000,7 @@ async function adminAction(store, payload) {
   return {
     ok: true,
     message: "Action completed.",
-    store: buildTenantStore(store, user.tenant_id)
+    store: user.role === "customer" ? buildCustomerStore(store, user) : buildTenantStore(store, user.tenant_id)
   };
 }
 
