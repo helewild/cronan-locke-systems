@@ -35,6 +35,7 @@ const ROLE_PERMISSIONS = {
     "view_platform",
     "view_bank_core",
     "view_accounts",
+    "view_organizations",
     "view_employment",
     "view_staff",
     "view_cards",
@@ -48,6 +49,10 @@ const ROLE_PERMISSIONS = {
     "view_audit_logs",
     "manage_tenant",
     "create_tenant",
+    "create_organization",
+    "update_organization",
+    "deactivate_organization",
+    "reactivate_organization",
     "delete_tenant",
     "suspend_tenant",
     "activate_tenant",
@@ -81,6 +86,7 @@ const ROLE_PERMISSIONS = {
   tenant_owner: [
     "view_bank_core",
     "view_accounts",
+    "view_organizations",
     "view_employment",
     "view_staff",
     "view_cards",
@@ -93,6 +99,10 @@ const ROLE_PERMISSIONS = {
     "view_atm_network",
     "view_audit_logs",
     "manage_tenant",
+    "create_organization",
+    "update_organization",
+    "deactivate_organization",
+    "reactivate_organization",
     "create_staff_user",
     "disable_staff_user",
     "enable_staff_user",
@@ -118,6 +128,7 @@ const ROLE_PERMISSIONS = {
   bank_admin: [
     "view_bank_core",
     "view_accounts",
+    "view_organizations",
     "view_employment",
     "view_cards",
     "view_transactions",
@@ -126,6 +137,10 @@ const ROLE_PERMISSIONS = {
     "view_payroll",
     "view_audit_logs",
     "create_customer_account",
+    "create_organization",
+    "update_organization",
+    "deactivate_organization",
+    "reactivate_organization",
     "create_employment",
     "update_employment",
     "terminate_employment",
@@ -193,6 +208,7 @@ function buildTenantStore(store, tenantId) {
       })),
       licenses: (store.licenses || []).map((item) => withLicenseMeta(item)),
       players: (store.players || []).map((item) => ({ ...item })),
+      organizations: (store.organizations || []).map((item) => ({ ...item })),
       accounts: (store.accounts || []).map((item) => ({ ...item })),
       cards: (store.cards || []).map((item) => ({ ...item })),
       fines: (store.fines || []).map((item) => ({ ...item })),
@@ -225,6 +241,7 @@ function buildTenantStore(store, tenantId) {
     tenants: (store.tenants || []).filter((item) => item.tenant_id === tenantId),
     users,
     licenses: (store.licenses || []).filter((item) => item.tenant_id === tenantId).map((item) => withLicenseMeta(item)),
+    organizations: (store.organizations || []).filter((item) => item.tenant_id === tenantId),
     accounts,
     cards: (store.cards || []).filter((item) => accountIds.has(item.account_id)),
     fines: (store.fines || []).filter((item) => accountIds.has(item.account_id)),
@@ -310,6 +327,14 @@ function findUserById(store, tenantId, userId) {
 
 function findEmployment(store, tenantId, employmentId) {
   return (store.employments || []).find((item) => item.tenant_id === tenantId && item.employment_id === employmentId) || null;
+}
+
+function findOrganization(store, tenantId, organizationId) {
+  return (store.organizations || []).find((item) => item.tenant_id === tenantId && item.organization_id === organizationId) || null;
+}
+
+function findOrganizationAny(store, organizationId) {
+  return (store.organizations || []).find((item) => item.organization_id === organizationId) || null;
 }
 
 function findTenant(store, tenantId) {
@@ -432,8 +457,20 @@ function nextEmploymentId(store) {
   return "EMP-" + String(next);
 }
 
+function nextOrganizationId(store) {
+  const numeric = (store.organizations || [])
+    .map((item) => Number(String(item.organization_id || "").replace("ORG-", "")))
+    .filter((value) => Number.isFinite(value));
+  const next = (numeric.length ? Math.max(...numeric) : 1000) + 1;
+  return "ORG-" + String(next);
+}
+
 function buildActivationCode(tenantId) {
   return "ACT-" + String(tenantId).replace("tenant-", "").padStart(6, "0");
+}
+
+function buildTreasuryAccountName(name) {
+  return /treasury$/i.test(String(name || "").trim()) ? String(name || "").trim() : (String(name || "").trim() + " Treasury");
 }
 
 function appendPortalAudit(store, actorName, tenantId, objectType, objectId, targetAccountId, action, amount, memo) {
@@ -1335,6 +1372,150 @@ function createCustomerAccount(store, tenantId, actorName, payload) {
   appendPortalAudit(store, actorName, tenantId, "account", accountId, accountId, "account_create", openingDeposit, "Created customer account for " + avatarName);
 }
 
+function createOrganization(store, tenantId, actorName, payload) {
+  if (!Array.isArray(store.organizations)) {
+    store.organizations = [];
+  }
+
+  const name = String(payload.name || "").trim();
+  const organizationType = String(payload.organization_type || "BUSINESS").trim().toUpperCase();
+  const departmentName = String(payload.department_name || "").trim();
+  const notes = String(payload.notes || "").trim();
+  const branchId = String(payload.branch_id || "main-branch").trim();
+  const openingBalance = Number(payload.opening_balance || 0);
+
+  if (!name) {
+    throw new Error("Organization name is required.");
+  }
+  if (!["BUSINESS", "GOVERNMENT", "DEPARTMENT", "NONPROFIT"].includes(organizationType)) {
+    throw new Error("Unsupported organization type.");
+  }
+  if (!Number.isFinite(openingBalance) || openingBalance < 0) {
+    throw new Error("Opening balance must be zero or greater.");
+  }
+  if ((store.organizations || []).some((item) => item.tenant_id === tenantId && String(item.name || "").trim().toLowerCase() === name.toLowerCase())) {
+    throw new Error("Organization name already exists.");
+  }
+
+  const accountId = nextId("WPB-ACCT-", (store.accounts || []).map((item) => item.account_id));
+  const organizationId = nextOrganizationId(store);
+
+  store.accounts.push({
+    account_id: accountId,
+    tenant_id: tenantId,
+    branch_id: branchId,
+    player_id: null,
+    customer_name: buildTreasuryAccountName(name),
+    balance: openingBalance,
+    cash_on_hand: 0,
+    outstanding_fine: 0,
+    loan_balance: 0,
+    status: "ACTIVE"
+  });
+
+  store.organizations.push({
+    organization_id: organizationId,
+    tenant_id: tenantId,
+    name,
+    organization_type: organizationType,
+    department_name: departmentName,
+    treasury_account_id: accountId,
+    status: "ACTIVE",
+    created_at: new Date().toISOString(),
+    notes
+  });
+
+  if (openingBalance > 0) {
+    createTransaction(store, {
+      account_id: accountId,
+      type: "TREASURY_FUNDING",
+      amount: openingBalance,
+      direction: "IN",
+      memo: "Initial treasury funding"
+    });
+  }
+
+  appendPortalAudit(store, actorName, tenantId, "organization", organizationId, accountId, "organization_create", openingBalance, "Created " + organizationType + " organization " + name);
+}
+
+function updateOrganization(store, tenantId, actorName, payload) {
+  const organization = findOrganization(store, tenantId, payload.organization_id);
+  if (!organization) {
+    throw new Error("Organization not found.");
+  }
+
+  const nextName = String(payload.name || organization.name).trim();
+  const nextType = String(payload.organization_type || organization.organization_type || "BUSINESS").trim().toUpperCase();
+  const nextDepartment = String(payload.department_name ?? organization.department_name ?? "").trim();
+  const nextNotes = String(payload.notes ?? organization.notes ?? "").trim();
+
+  if (!nextName) {
+    throw new Error("Organization name is required.");
+  }
+  if (!["BUSINESS", "GOVERNMENT", "DEPARTMENT", "NONPROFIT"].includes(nextType)) {
+    throw new Error("Unsupported organization type.");
+  }
+  if ((store.organizations || []).some((item) => item.tenant_id === tenantId && item.organization_id !== organization.organization_id && String(item.name || "").trim().toLowerCase() === nextName.toLowerCase())) {
+    throw new Error("Organization name already exists.");
+  }
+
+  organization.name = nextName;
+  organization.organization_type = nextType;
+  organization.department_name = nextDepartment;
+  organization.notes = nextNotes;
+
+  const treasuryAccount = findAccount(store, tenantId, organization.treasury_account_id);
+  if (treasuryAccount) {
+    treasuryAccount.customer_name = buildTreasuryAccountName(nextName);
+  }
+
+  appendPortalAudit(store, actorName, tenantId, "organization", organization.organization_id, organization.treasury_account_id, "organization_update", 0, "Organization details updated");
+}
+
+function updateOrganizationStatus(store, tenantId, actorName, organizationId, nextStatus) {
+  const organization = findOrganization(store, tenantId, organizationId);
+  if (!organization) {
+    throw new Error("Organization not found.");
+  }
+
+  organization.status = nextStatus;
+  const treasuryAccount = findAccount(store, tenantId, organization.treasury_account_id);
+  if (treasuryAccount) {
+    treasuryAccount.status = nextStatus === "ACTIVE" ? "ACTIVE" : "FROZEN";
+  }
+
+  appendPortalAudit(
+    store,
+    actorName,
+    tenantId,
+    "organization",
+    organization.organization_id,
+    organization.treasury_account_id,
+    nextStatus === "ACTIVE" ? "organization_reactivate" : "organization_deactivate",
+    0,
+    "Organization status set to " + nextStatus
+  );
+}
+
+function resolveOrganizationTenantId(store, actorUser, payload) {
+  if (actorUser.tenant_id !== "platform-root") {
+    return actorUser.tenant_id;
+  }
+
+  if (payload.target_tenant_id) {
+    return String(payload.target_tenant_id).trim();
+  }
+
+  if (payload.organization_id) {
+    const organization = findOrganizationAny(store, payload.organization_id);
+    if (organization) {
+      return organization.tenant_id;
+    }
+  }
+
+  throw new Error("Target tenant is required for platform organization management.");
+}
+
 async function adminAction(store, payload) {
   const user = requireSession(store, payload);
   const actorName = payload.actor_name || user.username;
@@ -1435,6 +1616,22 @@ async function adminAction(store, payload) {
     case "create_customer_account":
       requirePermission(user, "create_customer_account");
       createCustomerAccount(store, user.tenant_id, actorName, payload);
+      break;
+    case "create_organization":
+      requirePermission(user, "create_organization");
+      createOrganization(store, resolveOrganizationTenantId(store, user, payload), actorName, payload);
+      break;
+    case "update_organization":
+      requirePermission(user, "update_organization");
+      updateOrganization(store, resolveOrganizationTenantId(store, user, payload), actorName, payload);
+      break;
+    case "deactivate_organization":
+      requirePermission(user, "deactivate_organization");
+      updateOrganizationStatus(store, resolveOrganizationTenantId(store, user, payload), actorName, payload.organization_id, "INACTIVE");
+      break;
+    case "reactivate_organization":
+      requirePermission(user, "reactivate_organization");
+      updateOrganizationStatus(store, resolveOrganizationTenantId(store, user, payload), actorName, payload.organization_id, "ACTIVE");
       break;
     case "withdraw_account":
       requirePermission(user, "withdraw_account");

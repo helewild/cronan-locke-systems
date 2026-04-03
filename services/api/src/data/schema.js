@@ -86,6 +86,29 @@ export const STORE_TABLES = [
     columns: ["player_id", "tenant_id", "avatar_name", "status"]
   },
   {
+    key: "organizations",
+    table: "organizations",
+    columns: [
+      "organization_id",
+      "tenant_id",
+      "name",
+      "organization_type",
+      "department_name",
+      "treasury_account_id",
+      "status",
+      "created_at",
+      "notes"
+    ],
+    defaults: {
+      organization_type: "BUSINESS",
+      department_name: "",
+      treasury_account_id: "",
+      status: "ACTIVE",
+      created_at: "",
+      notes: ""
+    }
+  },
+  {
     key: "accounts",
     table: "accounts",
     columns: [
@@ -273,6 +296,17 @@ export const CREATE_TABLE_STATEMENTS = [
     avatar_name TEXT NOT NULL,
     status TEXT NOT NULL
   )`,
+  `CREATE TABLE IF NOT EXISTS organizations (
+    organization_id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    organization_type TEXT NOT NULL DEFAULT 'BUSINESS',
+    department_name TEXT,
+    treasury_account_id TEXT,
+    status TEXT NOT NULL DEFAULT 'ACTIVE',
+    created_at TIMESTAMPTZ,
+    notes TEXT
+  )`,
   `CREATE TABLE IF NOT EXISTS accounts (
     account_id TEXT PRIMARY KEY,
     tenant_id TEXT NOT NULL,
@@ -362,6 +396,11 @@ export const CREATE_TABLE_STATEMENTS = [
   )`,
   `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS payroll_default_amount NUMERIC(18,2) NOT NULL DEFAULT 250`,
   `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS primary_region_name TEXT`,
+  `ALTER TABLE organizations ADD COLUMN IF NOT EXISTS organization_type TEXT NOT NULL DEFAULT 'BUSINESS'`,
+  `ALTER TABLE organizations ADD COLUMN IF NOT EXISTS department_name TEXT`,
+  `ALTER TABLE organizations ADD COLUMN IF NOT EXISTS treasury_account_id TEXT`,
+  `ALTER TABLE organizations ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ`,
+  `ALTER TABLE organizations ADD COLUMN IF NOT EXISTS notes TEXT`,
   `ALTER TABLE licenses ADD COLUMN IF NOT EXISTS setup_box_key TEXT`,
   `ALTER TABLE licenses ADD COLUMN IF NOT EXISTS renewed_at TIMESTAMPTZ`,
   `ALTER TABLE licenses ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ`

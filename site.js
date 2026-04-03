@@ -48,6 +48,7 @@ const VIEW_PERMISSIONS = {
   platform: "view_platform",
   "bank-core": "view_bank_core",
   accounts: "view_accounts",
+  organizations: "view_organizations",
   employment: "view_employment",
   staff: "view_staff",
   cards: "view_cards",
@@ -542,6 +543,7 @@ function renderTable(view) {
     platform: "Search tenant, bank, owner, license, or activity",
     "bank-core": "Search module, scope, health, or note",
     accounts: "Search customer, account, balance, or status",
+    organizations: "Search organization, type, treasury account, balance, or status",
     employment: "Search employee, employer, title, department, or pay rate",
     staff: "Search username, avatar, role, or status",
     cards: "Search card, account, state, or card number",
@@ -611,6 +613,7 @@ function renderTable(view) {
     columns = ["Module", "Scope", "Health", "Note"];
     rows = [
       ["Accounts", "Customer banking", "ONLINE", "Balances, cards, and statements available"],
+      ["Organizations", "Business and department treasury", "ONLINE", `${safeArray(store.organizations).length} treasury organization(s) active`],
       ["Justice", "Fines and enforcement", "ONLINE", "Fine collection and records active"],
       ["Credit", "Loans and lending", "ONLINE", "Outstanding loan servicing enabled"],
       ["Security", "Vault and dispatch", state.incident ? "ALERT" : "ONLINE", state.incident ? state.incident.stage : "No incident"]
@@ -636,6 +639,42 @@ function renderTable(view) {
         ]
       }
     ]);
+  } else if (view === "organizations") {
+    title.textContent = "Organizations";
+    columns = ["Org ID", "Organization", "Type", "Treasury", "Status", "Actions"];
+    rows = safeArray(store.organizations)
+      .filter((organization) => {
+        const treasury = safeArray(store.accounts).find((account) => account.account_id === organization.treasury_account_id);
+        return matchesSearch([
+          organization.organization_id,
+          organization.name,
+          organization.organization_type,
+          organization.department_name || "",
+          organization.treasury_account_id || "",
+          treasury ? String(treasury.balance) : "",
+          organization.status,
+          organization.notes || ""
+        ]);
+      })
+      .map((organization) => {
+        const treasury = safeArray(store.accounts).find((account) => account.account_id === organization.treasury_account_id);
+        const tenant = safeArray(store.tenants).find((item) => item.tenant_id === organization.tenant_id);
+        return [
+          organization.organization_id,
+          `${organization.name}${organization.department_name ? `<br><span class="dim-copy">${organization.department_name}</span>` : ""}${state.session?.role === "platform_admin" ? `<br><span class="dim-copy">${tenant?.name || organization.tenant_id}</span>` : ""}`,
+          { chip: organization.organization_type, tone: organization.organization_type === "GOVERNMENT" ? "dim" : "" },
+          `${organization.treasury_account_id || "UNASSIGNED"}<br><span class="dim-copy">L$${Number(treasury?.balance || 0)}</span>`,
+          { chip: organization.status, tone: organization.status === "ACTIVE" ? "" : "dim" },
+          {
+            actions: [
+              { label: "Edit", kind: "edit-organization", organizationId: organization.organization_id, permission: "update_organization" },
+              organization.status === "ACTIVE"
+                ? { label: "Deactivate", kind: "deactivate-organization", organizationId: organization.organization_id, tone: "danger", permission: "deactivate_organization" }
+                : { label: "Reactivate", kind: "reactivate-organization", organizationId: organization.organization_id, permission: "reactivate_organization" }
+            ].filter(Boolean)
+          }
+        ];
+      });
   } else if (view === "employment") {
     title.textContent = "Employment";
     columns = ["Employment ID", "Employee", "Employer", "Title", "Pay Rate", "Status", "Actions"];
@@ -816,7 +855,7 @@ function renderTable(view) {
     }
     if (cell && typeof cell === "object" && "actions" in cell) {
       return `<td><div class="row-actions">${cell.actions.length ? cell.actions.map((action) =>
-        `<button class="row-action ${action.tone || ""}" type="button" ${action.permission && !hasPermission(action.permission) ? "disabled" : ""} data-row-action="${action.kind}" data-account-id="${action.accountId || ""}" data-card-id="${action.cardId || ""}" data-fine-id="${action.fineId || ""}" data-loan-id="${action.loanId || ""}" data-user-id="${action.userId || ""}" data-tenant-id="${action.tenantId || ""}">${action.label}</button>`
+        `<button class="row-action ${action.tone || ""}" type="button" ${action.permission && !hasPermission(action.permission) ? "disabled" : ""} data-row-action="${action.kind}" data-account-id="${action.accountId || ""}" data-card-id="${action.cardId || ""}" data-fine-id="${action.fineId || ""}" data-loan-id="${action.loanId || ""}" data-user-id="${action.userId || ""}" data-tenant-id="${action.tenantId || ""}" data-employment-id="${action.employmentId || ""}" data-organization-id="${action.organizationId || ""}">${action.label}</button>`
       ).join("") : '<span class="dim-copy">No actions</span>'}</div></td>`;
     }
     return `<td>${cell}</td>`;
@@ -838,12 +877,22 @@ function setActiveView(view) {
     link.classList.toggle("hidden", !canAccessView(link.dataset.view));
   });
   const actionButton = document.getElementById("view-action-btn");
-  actionButton.classList.toggle("hidden", !(view === "platform" || view === "payroll" || view === "accounts" || view === "employment" || view === "staff"));
-  actionButton.textContent = view === "platform" ? "New Tenant" : (view === "accounts" ? "New Account" : (view === "employment" ? "New Job" : (view === "staff" ? "New Staff" : "Run Payroll")));
+  actionButton.classList.toggle("hidden", !(view === "platform" || view === "payroll" || view === "accounts" || view === "organizations" || view === "employment" || view === "staff"));
+  actionButton.textContent = view === "platform"
+    ? "New Tenant"
+    : (view === "accounts"
+      ? "New Account"
+      : (view === "organizations"
+        ? "New Org"
+        : (view === "employment" ? "New Job" : (view === "staff" ? "New Staff" : "Run Payroll"))));
   actionButton.disabled =
     view === "platform"
       ? !hasPermission("create_tenant")
-      : (view === "accounts" ? !hasPermission("create_customer_account") : (view === "employment" ? !hasPermission("create_employment") : (view === "staff" ? !hasPermission("create_staff_user") : (view === "payroll" ? !hasPermission("run_payroll") : false))));
+      : (view === "accounts"
+        ? !hasPermission("create_customer_account")
+        : (view === "organizations"
+          ? !hasPermission("create_organization")
+          : (view === "employment" ? !hasPermission("create_employment") : (view === "staff" ? !hasPermission("create_staff_user") : (view === "payroll" ? !hasPermission("run_payroll") : false)))));
   renderTable(view);
   savePreviewState();
 }
@@ -1170,6 +1219,128 @@ async function submitStaffCreate(event) {
   `;
   document.getElementById("staff-created").classList.remove("hidden");
   addLog(result.message || `Staff user ${username} created.`);
+}
+
+async function runOrganizationAction(kind, organizationId) {
+  if (kind === "create-organization") {
+    let targetTenantId = "";
+    if (state.session?.role === "platform_admin") {
+      targetTenantId = window.prompt("Target tenant ID:", safeArray(state.store?.tenants)[0]?.tenant_id || "demo-tenant") || "";
+      if (!targetTenantId.trim()) {
+        addLog("Organization creation canceled.");
+        return;
+      }
+    }
+    const name = window.prompt("Organization or department name:", "");
+    if (!name || !name.trim()) {
+      addLog("Organization creation canceled.");
+      return;
+    }
+    const type = window.prompt("Organization type (BUSINESS, GOVERNMENT, DEPARTMENT, NONPROFIT):", "BUSINESS");
+    if (!type || !type.trim()) {
+      addLog("Organization creation canceled.");
+      return;
+    }
+    const department = window.prompt("Department or division name (optional):", "");
+    if (department === null) {
+      addLog("Organization creation canceled.");
+      return;
+    }
+    const openingRaw = window.prompt("Opening treasury balance:", "0");
+    if (openingRaw === null) {
+      addLog("Organization creation canceled.");
+      return;
+    }
+    const openingBalance = Number(openingRaw);
+    if (!Number.isFinite(openingBalance) || openingBalance < 0) {
+      addLog("Opening treasury balance must be zero or greater.");
+      return;
+    }
+    const notes = window.prompt("Notes (optional):", "");
+    if (notes === null) {
+      addLog("Organization creation canceled.");
+      return;
+    }
+
+    const result = await runAdminAction("create_organization", {
+      target_tenant_id: targetTenantId.trim(),
+      name: name.trim(),
+      organization_type: type.trim().toUpperCase(),
+      department_name: String(department || "").trim(),
+      opening_balance: openingBalance,
+      notes: String(notes || "").trim()
+    });
+    if (!result.ok) {
+      addLog(result.error || "Organization creation failed.");
+      return;
+    }
+    applyStore(result.store);
+    addLog(result.message || `Organization ${name.trim()} created.`);
+    return;
+  }
+
+  const organization = safeArray(state.store?.organizations).find((item) => item.organization_id === organizationId);
+  if (!organization) {
+    addLog("Organization record not found.");
+    return;
+  }
+
+  if (kind === "edit-organization") {
+    const name = window.prompt("Organization or department name:", organization.name || "");
+    if (!name || !name.trim()) {
+      addLog("Organization update canceled.");
+      return;
+    }
+    const type = window.prompt("Organization type (BUSINESS, GOVERNMENT, DEPARTMENT, NONPROFIT):", organization.organization_type || "BUSINESS");
+    if (!type || !type.trim()) {
+      addLog("Organization update canceled.");
+      return;
+    }
+    const department = window.prompt("Department or division name (optional):", organization.department_name || "");
+    if (department === null) {
+      addLog("Organization update canceled.");
+      return;
+    }
+    const notes = window.prompt("Notes (optional):", organization.notes || "");
+    if (notes === null) {
+      addLog("Organization update canceled.");
+      return;
+    }
+
+    const result = await runAdminAction("update_organization", {
+      target_tenant_id: organization.tenant_id,
+      organization_id: organizationId,
+      name: name.trim(),
+      organization_type: type.trim().toUpperCase(),
+      department_name: String(department || "").trim(),
+      notes: String(notes || "").trim()
+    });
+    if (!result.ok) {
+      addLog(result.error || "Organization update failed.");
+      return;
+    }
+    applyStore(result.store);
+    addLog(result.message || `Organization ${organizationId} updated.`);
+    return;
+  }
+
+  const nextAction = kind === "reactivate-organization" ? "reactivate_organization" : "deactivate_organization";
+  const confirmed = window.confirm(`${kind === "reactivate-organization" ? "Reactivate" : "Deactivate"} ${organization.name}?`);
+  if (!confirmed) {
+    addLog(`Organization ${kind === "reactivate-organization" ? "reactivation" : "deactivation"} canceled.`);
+    return;
+  }
+
+  const result = await runAdminAction(nextAction, {
+    target_tenant_id: organization.tenant_id,
+    organization_id: organizationId
+  });
+  if (!result.ok) {
+    addLog(result.error || "Organization status update failed.");
+    return;
+  }
+  applyStore(result.store);
+  addLog(result.message || `Organization ${organizationId} updated.`);
 }
 
 async function runEmploymentAction(kind, employmentId) {
@@ -1559,6 +1730,10 @@ function wireAdminActions() {
       await runEmploymentAction(kind, button.dataset.employmentId);
       return;
     }
+    if (["create-organization", "edit-organization", "deactivate-organization", "reactivate-organization"].includes(kind)) {
+      await runOrganizationAction(kind, button.dataset.organizationId);
+      return;
+    }
     if (["edit-tenant", "suspend-tenant", "activate-tenant", "reissue-code", "delete-tenant", "suspend-license", "activate-license", "extend-license", "expire-license"].includes(kind)) {
       await runTenantAction(kind, button.dataset.tenantId);
       return;
@@ -1734,6 +1909,10 @@ function wireAdminActions() {
     }
     if (state.view === "accounts") {
       await runAccountAction("create-account");
+      return;
+    }
+    if (state.view === "organizations") {
+      await runOrganizationAction("create-organization");
       return;
     }
     if (state.view === "employment") {
