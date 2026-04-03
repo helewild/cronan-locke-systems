@@ -200,7 +200,9 @@ const ROLE_PERMISSIONS = {
     "view_loans",
     "lock_card",
     "unlock_card",
-    "report_stolen_card"
+    "report_stolen_card",
+    "pay_fine",
+    "pay_loan"
   ]
 };
 
@@ -1268,10 +1270,13 @@ function terminateEmployment(store, tenantId, actorName, employmentId) {
   appendPortalAudit(store, actorName, tenantId, "employment", employment.employment_id, employment.account_id, "employment_terminate", 0, "Employment terminated");
 }
 
-function payFine(store, tenantId, actorName, fineId) {
+function payFine(store, tenantId, actorName, fineId, allowedAccountId = "") {
   const fine = findFine(store, tenantId, fineId);
   if (!fine) {
     throw new Error("Fine not found.");
+  }
+  if (allowedAccountId && fine.account_id !== allowedAccountId) {
+    throw new Error("Fine access denied for this portal account.");
   }
   if (String(fine.status || "").toUpperCase() !== "DUE") {
     throw new Error("Fine is not due.");
@@ -1300,10 +1305,13 @@ function payFine(store, tenantId, actorName, fineId) {
   appendPortalAudit(store, actorName, tenantId, "fine", fine.fine_id, account.account_id, "fine_pay", Number(fine.amount || 0), "Fine paid from admin terminal");
 }
 
-function payLoan(store, tenantId, actorName, loanId, amountInput) {
+function payLoan(store, tenantId, actorName, loanId, amountInput, allowedAccountId = "") {
   const loan = findLoan(store, tenantId, loanId);
   if (!loan) {
     throw new Error("Loan not found.");
+  }
+  if (allowedAccountId && loan.account_id !== allowedAccountId) {
+    throw new Error("Loan access denied for this portal account.");
   }
   if (String(loan.status || "").toUpperCase() !== "ACTIVE") {
     throw new Error("Loan is not active.");
@@ -1992,11 +2000,11 @@ async function adminAction(store, payload) {
       break;
     case "pay_fine":
       requirePermission(user, "pay_fine");
-      payFine(store, user.tenant_id, actorName, payload.fine_id);
+      payFine(store, user.tenant_id, actorName, payload.fine_id, user.role === "customer" ? user.linked_account_id : "");
       break;
     case "pay_loan":
       requirePermission(user, "pay_loan");
-      payLoan(store, user.tenant_id, actorName, payload.loan_id, payload.amount);
+      payLoan(store, user.tenant_id, actorName, payload.loan_id, payload.amount, user.role === "customer" ? user.linked_account_id : "");
       break;
     default:
       return { ok: false, error: "Unsupported admin action." };

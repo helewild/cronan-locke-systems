@@ -800,6 +800,8 @@ function renderPlayerPortal() {
   const primaryCard = cards[0] || null;
   const fines = safeArray(store.fines);
   const loans = safeArray(store.loans);
+  const dueFine = fines.find((item) => item.status === "DUE") || null;
+  const activeLoan = loans.find((item) => item.status === "ACTIVE") || null;
   const transactions = safeArray(store.transactions).slice(0, 8);
   const employment = safeArray(store.employments).find((item) => item.status === "ACTIVE") || null;
 
@@ -856,10 +858,14 @@ function renderPlayerPortal() {
   const lockButton = document.getElementById("player-lock-card-btn");
   const unlockButton = document.getElementById("player-unlock-card-btn");
   const reportButton = document.getElementById("player-report-card-btn");
-  if (lockButton && unlockButton && reportButton) {
+  const fineButton = document.getElementById("player-pay-fine-btn");
+  const loanButton = document.getElementById("player-pay-loan-btn");
+  if (lockButton && unlockButton && reportButton && fineButton && loanButton) {
     lockButton.disabled = !primaryCard || primaryCard.state !== "ACTIVE";
     unlockButton.disabled = !primaryCard || primaryCard.state !== "LOCKED";
     reportButton.disabled = !primaryCard || primaryCard.state === "STOLEN";
+    fineButton.disabled = !dueFine;
+    loanButton.disabled = !activeLoan;
   }
 
   if (!primaryCard) {
@@ -1598,6 +1604,67 @@ async function runPlayerCardAction(kind) {
   } else {
     setPlayerBanner("[!] CARD REPORTED STOLEN", "alert");
   }
+}
+
+async function runPlayerFineAction() {
+  const fine = safeArray(state.store?.fines).find((item) => item.status === "DUE");
+  if (!fine) {
+    setPlayerBanner("[OK] NO DUE FINES FOUND", "ok");
+    return;
+  }
+
+  const confirmed = await confirmAction(
+    "Pay Outstanding Fine",
+    `This will pay <strong>${fine.reference || fine.fine_id}</strong> for <strong>L$${Number(fine.amount || 0)}</strong> from your linked bank account.`,
+    "Pay Fine"
+  );
+  if (!confirmed) {
+    return;
+  }
+
+  const result = await runAdminAction("pay_fine", { fine_id: fine.fine_id });
+  if (!result.ok) {
+    setPlayerBanner("[!] " + String(result.error || "Fine payment failed.").toUpperCase(), "alert");
+    return;
+  }
+
+  applyStore(result.store);
+  setPlayerBanner("[OK] FINE PAYMENT POSTED", "ok");
+}
+
+async function runPlayerLoanAction() {
+  const loan = safeArray(state.store?.loans).find((item) => item.status === "ACTIVE");
+  if (!loan) {
+    setPlayerBanner("[OK] NO ACTIVE LOANS FOUND", "ok");
+    return;
+  }
+
+  const values = await openActionModal({
+    title: "Pay Loan Balance",
+    submitLabel: "Apply Payment",
+    copy: `Submit a payment toward <strong>${loan.loan_id}</strong>. Current balance: <strong>L$${Number(loan.balance || 0)}</strong>.`,
+    fields: [
+      { name: "amount", label: "Payment Amount", type: "number", required: true, value: String(Math.min(Number(loan.balance || 0), 75) || 25) }
+    ]
+  });
+  if (!values) {
+    return;
+  }
+
+  const amount = Number(values.amount);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    setPlayerBanner("[!] PAYMENT AMOUNT MUST BE GREATER THAN ZERO", "alert");
+    return;
+  }
+
+  const result = await runAdminAction("pay_loan", { loan_id: loan.loan_id, amount });
+  if (!result.ok) {
+    setPlayerBanner("[!] " + String(result.error || "Loan payment failed.").toUpperCase(), "alert");
+    return;
+  }
+
+  applyStore(result.store);
+  setPlayerBanner("[OK] LOAN PAYMENT POSTED", "ok");
 }
 
 async function runFineAction(fineId) {
@@ -2558,6 +2625,12 @@ function wireAdminActions() {
       return;
     }
     await runPlayerCardAction("player-report-card");
+  });
+  document.getElementById("player-pay-fine-btn").addEventListener("click", async () => {
+    await runPlayerFineAction();
+  });
+  document.getElementById("player-pay-loan-btn").addEventListener("click", async () => {
+    await runPlayerLoanAction();
   });
   document.getElementById("staff-role").addEventListener("change", updateStaffRoleHint);
   document.getElementById("staff-form").addEventListener("submit", submitStaffCreate);
