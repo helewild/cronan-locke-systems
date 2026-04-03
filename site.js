@@ -778,11 +778,26 @@ function getCurrentTenant() {
   return safeArray(state.store?.tenants)[0] || null;
 }
 
+function setPlayerBanner(message, tone = "ok") {
+  const banner = document.getElementById("player-portal-banner");
+  if (!banner) {
+    return;
+  }
+  banner.textContent = message;
+  banner.classList.toggle("status-ok", tone !== "alert");
+  banner.classList.toggle("status-alert", tone === "alert");
+}
+
+function getPrimaryPlayerCard() {
+  return safeArray(state.store?.cards)[0] || null;
+}
+
 function renderPlayerPortal() {
   const store = state.store || {};
   const tenant = store.tenant || null;
   const account = store.account || null;
   const cards = safeArray(store.cards);
+  const primaryCard = cards[0] || null;
   const fines = safeArray(store.fines);
   const loans = safeArray(store.loans);
   const transactions = safeArray(store.transactions).slice(0, 8);
@@ -837,6 +852,25 @@ function renderPlayerPortal() {
   document.getElementById("player-status-line-1").textContent = "PORTAL: ONLINE";
   document.getElementById("player-status-line-2").textContent = `ACCOUNT: ${account?.status || "UNKNOWN"}`;
   document.getElementById("player-status-line-3").textContent = "MODE: " + (CONFIG.siteMode === "vps" ? "VPS API" : (CONFIG.apiUrl ? "APPS SCRIPT BRIDGE" : "STATIC PREVIEW"));
+
+  const lockButton = document.getElementById("player-lock-card-btn");
+  const unlockButton = document.getElementById("player-unlock-card-btn");
+  const reportButton = document.getElementById("player-report-card-btn");
+  if (lockButton && unlockButton && reportButton) {
+    lockButton.disabled = !primaryCard || primaryCard.state !== "ACTIVE";
+    unlockButton.disabled = !primaryCard || primaryCard.state !== "LOCKED";
+    reportButton.disabled = !primaryCard || primaryCard.state === "STOLEN";
+  }
+
+  if (!primaryCard) {
+    setPlayerBanner("[OK] ACCOUNT SERVICES AVAILABLE", "ok");
+  } else if (primaryCard.state === "STOLEN") {
+    setPlayerBanner("[!] CARD REPORTED STOLEN", "alert");
+  } else if (primaryCard.state === "LOCKED") {
+    setPlayerBanner("[!] CARD CURRENTLY LOCKED", "alert");
+  } else {
+    setPlayerBanner("[OK] ACCOUNT SERVICES AVAILABLE", "ok");
+  }
 }
 
 function applyStore(store) {
@@ -1530,6 +1564,40 @@ async function runCardAction(kind, cardId) {
 
   applyStore(result.store);
   addLog(result.message || `${kind} applied to ${cardId}.`);
+}
+
+async function runPlayerCardAction(kind) {
+  const card = getPrimaryPlayerCard();
+  if (!card) {
+    setPlayerBanner("[!] NO LINKED CARD AVAILABLE", "alert");
+    return;
+  }
+
+  const mapping = {
+    "player-lock-card": "lock_card",
+    "player-unlock-card": "unlock_card",
+    "player-report-card": "report_stolen_card"
+  };
+
+  const action = mapping[kind];
+  if (!action) {
+    return;
+  }
+
+  const result = await runAdminAction(action, { card_id: card.card_id });
+  if (!result.ok) {
+    setPlayerBanner("[!] " + String(result.error || "Card request failed.").toUpperCase(), "alert");
+    return;
+  }
+
+  applyStore(result.store);
+  if (action === "lock_card") {
+    setPlayerBanner("[!] CARD LOCKED BY ACCOUNT HOLDER", "alert");
+  } else if (action === "unlock_card") {
+    setPlayerBanner("[OK] CARD UNLOCKED", "ok");
+  } else {
+    setPlayerBanner("[!] CARD REPORTED STOLEN", "alert");
+  }
 }
 
 async function runFineAction(fineId) {
@@ -2474,6 +2542,23 @@ function wireAdminActions() {
 
   document.getElementById("logout-btn").addEventListener("click", logout);
   document.getElementById("player-logout-btn").addEventListener("click", logout);
+  document.getElementById("player-lock-card-btn").addEventListener("click", async () => {
+    await runPlayerCardAction("player-lock-card");
+  });
+  document.getElementById("player-unlock-card-btn").addEventListener("click", async () => {
+    await runPlayerCardAction("player-unlock-card");
+  });
+  document.getElementById("player-report-card-btn").addEventListener("click", async () => {
+    const confirmed = await confirmAction(
+      "Report Card Stolen",
+      "This will mark your linked card as stolen and disable normal card use until staff reviews it.",
+      "Report Stolen"
+    );
+    if (!confirmed) {
+      return;
+    }
+    await runPlayerCardAction("player-report-card");
+  });
   document.getElementById("staff-role").addEventListener("change", updateStaffRoleHint);
   document.getElementById("staff-form").addEventListener("submit", submitStaffCreate);
   document.getElementById("staff-cancel").addEventListener("click", closeStaffModal);

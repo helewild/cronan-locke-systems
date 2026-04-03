@@ -197,7 +197,10 @@ const ROLE_PERMISSIONS = {
     "view_cards",
     "view_transactions",
     "view_fines",
-    "view_loans"
+    "view_loans",
+    "lock_card",
+    "unlock_card",
+    "report_stolen_card"
   ]
 };
 
@@ -1136,10 +1139,13 @@ function extendLicense(store, actorName, targetTenantId, daysInput) {
   );
 }
 
-function updateCardState(store, tenantId, actorName, cardId, nextState, action, memo) {
+function updateCardState(store, tenantId, actorName, cardId, nextState, action, memo, allowedAccountId = "") {
   const card = findCard(store, tenantId, cardId);
   if (!card) {
     throw new Error("Card not found.");
+  }
+  if (allowedAccountId && card.account_id !== allowedAccountId) {
+    throw new Error("Card access denied for this portal account.");
   }
 
   card.state = nextState;
@@ -1974,15 +1980,15 @@ async function adminAction(store, payload) {
       break;
     case "lock_card":
       requirePermission(user, "lock_card");
-      updateCardState(store, user.tenant_id, actorName, payload.card_id, "LOCKED", "card_lock", "Card locked from admin terminal");
+      updateCardState(store, user.tenant_id, actorName, payload.card_id, "LOCKED", "card_lock", user.role === "customer" ? "Card locked from customer portal" : "Card locked from admin terminal", user.role === "customer" ? user.linked_account_id : "");
       break;
     case "unlock_card":
       requirePermission(user, "unlock_card");
-      updateCardState(store, user.tenant_id, actorName, payload.card_id, "ACTIVE", "card_unlock", "Card unlocked from admin terminal");
+      updateCardState(store, user.tenant_id, actorName, payload.card_id, "ACTIVE", "card_unlock", user.role === "customer" ? "Card unlocked from customer portal" : "Card unlocked from admin terminal", user.role === "customer" ? user.linked_account_id : "");
       break;
     case "report_stolen_card":
       requirePermission(user, "report_stolen_card");
-      updateCardState(store, user.tenant_id, actorName, payload.card_id, "STOLEN", "card_report_stolen", "Card reported stolen from admin terminal");
+      updateCardState(store, user.tenant_id, actorName, payload.card_id, "STOLEN", "card_report_stolen", user.role === "customer" ? "Card reported stolen from customer portal" : "Card reported stolen from admin terminal", user.role === "customer" ? user.linked_account_id : "");
       break;
     case "pay_fine":
       requirePermission(user, "pay_fine");

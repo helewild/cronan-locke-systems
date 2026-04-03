@@ -507,6 +507,16 @@ th { color: var(--text-dim); font-size: 12px; text-transform: uppercase; font-we
   resize: vertical;
 }
 
+.player-actions {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.player-actions button {
+  width: 100%;
+}
+
 .modal-title {
   margin-bottom: 14px;
 }
