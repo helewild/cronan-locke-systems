@@ -337,6 +337,10 @@ function findOrganizationAny(store, organizationId) {
   return (store.organizations || []).find((item) => item.organization_id === organizationId) || null;
 }
 
+function findOrganizationByAccount(store, tenantId, accountId) {
+  return (store.organizations || []).find((item) => item.tenant_id === tenantId && item.treasury_account_id === accountId) || null;
+}
+
 function findTenant(store, tenantId) {
   return (store.tenants || []).find((item) => item.tenant_id === tenantId) || null;
 }
@@ -726,17 +730,56 @@ function runPayroll(store, tenantId, actorName, amountInput) {
     throw new Error("No eligible payroll targets found.");
   }
 
+  targets.forEach(({ amount, employment }) => {
+    if (!employment || !employment.organization_id) {
+      return;
+    }
+
+    const organization = findOrganization(store, tenantId, employment.organization_id);
+    if (!organization || String(organization.status || "").toUpperCase() !== "ACTIVE") {
+      throw new Error(`Organization funding source is unavailable for ${employment.title}.`);
+    }
+
+    const treasury = findAccount(store, tenantId, organization.treasury_account_id);
+    if (!treasury || !isActive(treasury.status)) {
+      throw new Error(`Treasury account is unavailable for ${organization.name}.`);
+    }
+    if (Number(treasury.balance || 0) < Number(amount || 0)) {
+      throw new Error(`Insufficient treasury funds for ${organization.name}.`);
+    }
+  });
+
   targets.forEach(({ account, amount, employment }) => {
     if (!Number.isFinite(amount) || amount <= 0) {
       return;
     }
+    let payrollMemo = "VPS payroll run";
+
+    if (employment?.organization_id) {
+      const organization = findOrganization(store, tenantId, employment.organization_id);
+      const treasury = organization ? findAccount(store, tenantId, organization.treasury_account_id) : null;
+      if (treasury) {
+        treasury.balance = Number(treasury.balance || 0) - amount;
+        createTransaction(store, {
+          account_id: treasury.account_id,
+          type: "PAYROLL_DISBURSEMENT",
+          amount,
+          direction: "OUT",
+          memo: `${organization?.name || employment.employer_name} payroll for ${account.customer_name}`
+        });
+      }
+      payrollMemo = `${organization?.name || employment.employer_name} payroll`;
+    } else if (employment) {
+      payrollMemo = `${employment.employer_name} payroll`;
+    }
+
     account.balance = Number(account.balance || 0) + amount;
     createTransaction(store, {
       account_id: account.account_id,
       type: "PAYROLL",
       amount,
       direction: "IN",
-      memo: employment ? `${employment.employer_name} payroll` : "VPS payroll run"
+      memo: payrollMemo
     });
     if (employment) {
       employment.last_paid_at = new Date().toISOString();
@@ -1048,7 +1091,9 @@ function createEmployment(store, tenantId, actorName, payload) {
   }
 
   const accountId = String(payload.account_id || "").trim();
-  const employerName = String(payload.employer_name || "").trim();
+  const organizationId = String(payload.organization_id || "").trim();
+  const linkedOrganization = organizationId ? findOrganization(store, tenantId, organizationId) : null;
+  const employerName = String(payload.employer_name || linkedOrganization?.name || "").trim();
   const departmentName = String(payload.department_name || "").trim();
   const title = String(payload.title || "").trim();
   const payRate = Number(payload.pay_rate || 0);
@@ -1070,13 +1115,17 @@ function createEmployment(store, tenantId, actorName, payload) {
   if (existing) {
     throw new Error("Account already has an active employment record.");
   }
+  if (organizationId && !linkedOrganization) {
+    throw new Error("Linked organization not found.");
+  }
 
   const employment = {
     employment_id: nextEmploymentId(store),
     tenant_id: tenantId,
     account_id: accountId,
+    organization_id: organizationId,
     employer_name: employerName,
-    department_name: departmentName,
+    department_name: departmentName || linkedOrganization?.department_name || "",
     title,
     pay_rate: payRate,
     pay_cycle: payCycle,
@@ -1113,8 +1162,14 @@ function updateEmployment(store, tenantId, actorName, payload) {
     throw new Error("Employment record not found.");
   }
 
-  const employerName = String(payload.employer_name || employment.employer_name).trim();
-  const departmentName = String(payload.department_name ?? employment.department_name).trim();
+  const organizationId = String(payload.organization_id ?? employment.organization_id ?? "").trim();
+  const linkedOrganization = organizationId ? findOrganization(store, tenantId, organizationId) : null;
+  if (organizationId && !linkedOrganization) {
+    throw new Error("Linked organization not found.");
+  }
+
+  const employerName = String(payload.employer_name || linkedOrganization?.name || employment.employer_name).trim();
+  const departmentName = String(payload.department_name ?? linkedOrganization?.department_name ?? employment.department_name).trim();
   const title = String(payload.title || employment.title).trim();
   const payRate = Number(payload.pay_rate ?? employment.pay_rate);
   const payCycle = String(payload.pay_cycle || employment.pay_cycle || "WEEKLY").trim().toUpperCase();
@@ -1126,6 +1181,7 @@ function updateEmployment(store, tenantId, actorName, payload) {
     throw new Error("Pay rate must be greater than zero.");
   }
 
+  employment.organization_id = organizationId;
   employment.employer_name = employerName;
   employment.department_name = departmentName;
   employment.title = title;

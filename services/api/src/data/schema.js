@@ -138,6 +138,7 @@ export const STORE_TABLES = [
       "employment_id",
       "tenant_id",
       "account_id",
+      "organization_id",
       "employer_name",
       "department_name",
       "title",
@@ -149,6 +150,7 @@ export const STORE_TABLES = [
     ],
     numberColumns: ["pay_rate"],
     defaults: {
+      organization_id: "",
       pay_rate: 0,
       pay_cycle: "WEEKLY",
       status: "ACTIVE",
@@ -323,6 +325,7 @@ export const CREATE_TABLE_STATEMENTS = [
     employment_id TEXT PRIMARY KEY,
     tenant_id TEXT NOT NULL,
     account_id TEXT NOT NULL,
+    organization_id TEXT,
     employer_name TEXT NOT NULL,
     department_name TEXT,
     title TEXT NOT NULL,
@@ -401,6 +404,7 @@ export const CREATE_TABLE_STATEMENTS = [
   `ALTER TABLE organizations ADD COLUMN IF NOT EXISTS treasury_account_id TEXT`,
   `ALTER TABLE organizations ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ`,
   `ALTER TABLE organizations ADD COLUMN IF NOT EXISTS notes TEXT`,
+  `ALTER TABLE employments ADD COLUMN IF NOT EXISTS organization_id TEXT`,
   `ALTER TABLE licenses ADD COLUMN IF NOT EXISTS setup_box_key TEXT`,
   `ALTER TABLE licenses ADD COLUMN IF NOT EXISTS renewed_at TIMESTAMPTZ`,
   `ALTER TABLE licenses ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ`

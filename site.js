@@ -496,7 +496,7 @@ function renderDetailPanel() {
     ["Card", card ? `${card.card_id}<br>State: <strong>${card.state}</strong><br>${card.card_number}` : "No linked card"],
     ["Obligations", `${fine ? `Fine: <strong>${fine.status}</strong> (${fine.reference})<br>` : "No active fine<br>"}${loan ? `Loan: <strong>${loan.status}</strong> (${loan.terms})` : "No active loan"}`],
     ["Recent Activity", recent.length ? recent.map((item) => `${item.type} L$${item.amount} ${item.direction}`).join("<br>") : "No transactions found"],
-    ["Employment", employment ? `${employment.title}<br>${employment.employer_name}<br>Pay Rate: <strong>L$${employment.pay_rate}</strong><br>Cycle: ${employment.pay_cycle}` : "No active employment"],
+    ["Employment", employment ? `${employment.title}<br>${employment.employer_name}${employment.organization_id ? `<br>Org: <strong>${employment.organization_id}</strong>` : ""}<br>Pay Rate: <strong>L$${employment.pay_rate}</strong><br>Cycle: ${employment.pay_cycle}` : "No active employment"],
     ["Player Link", `Player ID: ${account.player_id || "-"}<br>Branch: ${account.branch_id || "-"}<br>Tenant: ${account.tenant_id || "-"}`]
   ];
 
@@ -677,7 +677,7 @@ function renderTable(view) {
       });
   } else if (view === "employment") {
     title.textContent = "Employment";
-    columns = ["Employment ID", "Employee", "Employer", "Title", "Pay Rate", "Status", "Actions"];
+    columns = ["Employment ID", "Employee", "Employer", "Org", "Title", "Pay Rate", "Status", "Actions"];
     rows = safeArray(store.employments)
       .filter((employment) => {
         const account = safeArray(store.accounts).find((item) => item.account_id === employment.account_id);
@@ -686,6 +686,7 @@ function renderTable(view) {
           employment.account_id,
           account?.customer_name || "",
           employment.employer_name,
+          employment.organization_id || "",
           employment.department_name || "",
           employment.title,
           employment.status,
@@ -698,6 +699,7 @@ function renderTable(view) {
           employment.employment_id,
           `${account?.customer_name || employment.account_id}<br><span class="dim-copy">${employment.account_id}</span>`,
           `${employment.employer_name}${employment.department_name ? `<br><span class="dim-copy">${employment.department_name}</span>` : ""}`,
+          employment.organization_id ? `<span class="dim-copy">${employment.organization_id}</span>` : "-",
           `${employment.title}<br><span class="dim-copy">${employment.pay_cycle}</span>`,
           { money: employment.pay_rate },
           { chip: employment.status, tone: employment.status === "ACTIVE" ? "" : "dim" },
@@ -1350,12 +1352,18 @@ async function runEmploymentAction(kind, employmentId) {
       addLog("Employment creation canceled.");
       return;
     }
-    const employerName = window.prompt("Employer or business name:", "Whispering Pines Bank");
+    const organizationId = window.prompt("Organization ID (optional, recommended):", safeArray(state.store?.organizations)[0]?.organization_id || "");
+    if (organizationId === null) {
+      addLog("Employment creation canceled.");
+      return;
+    }
+    const organization = safeArray(state.store?.organizations).find((item) => item.organization_id === String(organizationId || "").trim());
+    const employerName = window.prompt("Employer or business name:", organization?.name || "Whispering Pines Bank");
     if (!employerName || !employerName.trim()) {
       addLog("Employment creation canceled.");
       return;
     }
-    const departmentName = window.prompt("Department name:", "Banking");
+    const departmentName = window.prompt("Department name:", organization?.department_name || "Banking");
     if (departmentName === null) {
       addLog("Employment creation canceled.");
       return;
@@ -1383,6 +1391,7 @@ async function runEmploymentAction(kind, employmentId) {
 
     const result = await runAdminAction("create_employment", {
       account_id: accountId.trim(),
+      organization_id: String(organizationId || "").trim(),
       employer_name: employerName.trim(),
       department_name: String(departmentName || "").trim(),
       title: title.trim(),
@@ -1409,12 +1418,18 @@ async function runEmploymentAction(kind, employmentId) {
       addLog("Employment record not found.");
       return;
     }
-    const employerName = window.prompt("Employer or business name:", employment.employer_name || "");
+    const organizationId = window.prompt("Organization ID (optional, recommended):", employment.organization_id || "");
+    if (organizationId === null) {
+      addLog("Employment update canceled.");
+      return;
+    }
+    const organization = safeArray(state.store?.organizations).find((item) => item.organization_id === String(organizationId || "").trim());
+    const employerName = window.prompt("Employer or business name:", organization?.name || employment.employer_name || "");
     if (!employerName || !employerName.trim()) {
       addLog("Employment update canceled.");
       return;
     }
-    const departmentName = window.prompt("Department name:", employment.department_name || "");
+    const departmentName = window.prompt("Department name:", organization?.department_name || employment.department_name || "");
     if (departmentName === null) {
       addLog("Employment update canceled.");
       return;
@@ -1442,6 +1457,7 @@ async function runEmploymentAction(kind, employmentId) {
 
     const result = await runAdminAction("update_employment", {
       employment_id: employmentId,
+      organization_id: String(organizationId || "").trim(),
       employer_name: employerName.trim(),
       department_name: String(departmentName || "").trim(),
       title: title.trim(),

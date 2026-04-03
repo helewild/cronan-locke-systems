@@ -205,6 +205,36 @@
       "memo": "Initial organization treasury funding"
     }
   ],
+  "employments": [
+    {
+      "employment_id": "EMP-10001",
+      "tenant_id": "demo-tenant",
+      "account_id": "WPB-ACCT-10001",
+      "organization_id": "ORG-1001",
+      "employer_name": "Whispering Pines Reserve",
+      "department_name": "Retail Banking",
+      "title": "Senior Teller",
+      "pay_rate": 425,
+      "pay_cycle": "WEEKLY",
+      "status": "ACTIVE",
+      "hired_at": "2026-04-02T00:00:00Z",
+      "last_paid_at": ""
+    },
+    {
+      "employment_id": "EMP-10002",
+      "tenant_id": "demo-tenant",
+      "account_id": "WPB-ACCT-10002",
+      "organization_id": "ORG-1002",
+      "employer_name": "Whispering Pines County",
+      "department_name": "Public Safety",
+      "title": "Clerk",
+      "pay_rate": 310,
+      "pay_cycle": "WEEKLY",
+      "status": "ACTIVE",
+      "hired_at": "2026-04-02T00:00:00Z",
+      "last_paid_at": ""
+    }
+  ],
   "fines": [
     {
       "fine_id": "WPB-FINE-70001",
