@@ -486,6 +486,14 @@ function buildTreasuryAccountName(name) {
   return /treasury$/i.test(String(name || "").trim()) ? String(name || "").trim() : (String(name || "").trim() + " Treasury");
 }
 
+function normalizeBudgetCycle(value) {
+  const cycle = String(value || "MONTHLY").trim().toUpperCase();
+  if (["NONE", "WEEKLY", "MONTHLY", "QUARTERLY", "ANNUAL"].includes(cycle)) {
+    return cycle;
+  }
+  throw new Error("Unsupported budget cycle.");
+}
+
 function appendPortalAudit(store, actorName, tenantId, objectType, objectId, targetAccountId, action, amount, memo) {
   createAuditEntry(store, {
     tenant_id: tenantId,
@@ -1448,6 +1456,9 @@ function createOrganization(store, tenantId, actorName, payload) {
   const notes = String(payload.notes || "").trim();
   const branchId = String(payload.branch_id || "main-branch").trim();
   const openingBalance = Number(payload.opening_balance || 0);
+  const budgetCycle = normalizeBudgetCycle(payload.budget_cycle || "MONTHLY");
+  const budgetAmount = Number(payload.budget_amount || 0);
+  const reserveTarget = Number(payload.reserve_target || 0);
 
   if (!name) {
     throw new Error("Organization name is required.");
@@ -1457,6 +1468,12 @@ function createOrganization(store, tenantId, actorName, payload) {
   }
   if (!Number.isFinite(openingBalance) || openingBalance < 0) {
     throw new Error("Opening balance must be zero or greater.");
+  }
+  if (!Number.isFinite(budgetAmount) || budgetAmount < 0) {
+    throw new Error("Budget amount must be zero or greater.");
+  }
+  if (!Number.isFinite(reserveTarget) || reserveTarget < 0) {
+    throw new Error("Reserve target must be zero or greater.");
   }
   if ((store.organizations || []).some((item) => item.tenant_id === tenantId && String(item.name || "").trim().toLowerCase() === name.toLowerCase())) {
     throw new Error("Organization name already exists.");
@@ -1485,6 +1502,9 @@ function createOrganization(store, tenantId, actorName, payload) {
     organization_type: organizationType,
     department_name: departmentName,
     treasury_account_id: accountId,
+    budget_cycle: budgetCycle,
+    budget_amount: budgetAmount,
+    reserve_target: reserveTarget,
     status: "ACTIVE",
     created_at: new Date().toISOString(),
     notes
@@ -1513,6 +1533,9 @@ function updateOrganization(store, tenantId, actorName, payload) {
   const nextType = String(payload.organization_type || organization.organization_type || "BUSINESS").trim().toUpperCase();
   const nextDepartment = String(payload.department_name ?? organization.department_name ?? "").trim();
   const nextNotes = String(payload.notes ?? organization.notes ?? "").trim();
+  const nextBudgetCycle = normalizeBudgetCycle(payload.budget_cycle ?? organization.budget_cycle ?? "MONTHLY");
+  const nextBudgetAmount = Number(payload.budget_amount ?? organization.budget_amount ?? 0);
+  const nextReserveTarget = Number(payload.reserve_target ?? organization.reserve_target ?? 0);
 
   if (!nextName) {
     throw new Error("Organization name is required.");
@@ -1523,10 +1546,19 @@ function updateOrganization(store, tenantId, actorName, payload) {
   if ((store.organizations || []).some((item) => item.tenant_id === tenantId && item.organization_id !== organization.organization_id && String(item.name || "").trim().toLowerCase() === nextName.toLowerCase())) {
     throw new Error("Organization name already exists.");
   }
+  if (!Number.isFinite(nextBudgetAmount) || nextBudgetAmount < 0) {
+    throw new Error("Budget amount must be zero or greater.");
+  }
+  if (!Number.isFinite(nextReserveTarget) || nextReserveTarget < 0) {
+    throw new Error("Reserve target must be zero or greater.");
+  }
 
   organization.name = nextName;
   organization.organization_type = nextType;
   organization.department_name = nextDepartment;
+  organization.budget_cycle = nextBudgetCycle;
+  organization.budget_amount = nextBudgetAmount;
+  organization.reserve_target = nextReserveTarget;
   organization.notes = nextNotes;
 
   const treasuryAccount = findAccount(store, tenantId, organization.treasury_account_id);

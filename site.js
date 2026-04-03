@@ -446,6 +446,31 @@ function getOrganizationPayrollBurden(store, organizationId) {
     .reduce((total, employment) => total + Number(employment.pay_rate || 0), 0);
 }
 
+function getOrganizationHealth(store, organization) {
+  const treasury = safeArray(store.accounts).find((account) => account.account_id === organization.treasury_account_id);
+  const treasuryBalance = Number(treasury?.balance || 0);
+  const burden = getOrganizationPayrollBurden(store, organization.organization_id);
+  const reserveTarget = Number(organization.reserve_target || 0);
+  const budgetAmount = Number(organization.budget_amount || 0);
+
+  if (organization.status !== "ACTIVE") {
+    return { label: "INACTIVE", tone: "dim" };
+  }
+  if (burden > 0 && treasuryBalance < burden) {
+    return { label: "PAYROLL RISK", tone: "alert" };
+  }
+  if (reserveTarget > 0 && treasuryBalance < reserveTarget) {
+    return { label: "UNDER RESERVE", tone: "alert" };
+  }
+  if (budgetAmount > 0 && burden > budgetAmount) {
+    return { label: "OVER BUDGET", tone: "alert" };
+  }
+  if (budgetAmount > 0 || reserveTarget > 0) {
+    return { label: "FUNDED", tone: "" };
+  }
+  return { label: "OPEN", tone: "dim" };
+}
+
 function ensureSelectedAccount(store) {
   const accounts = safeArray(store.accounts);
   if (!accounts.length) {
@@ -647,7 +672,7 @@ function renderTable(view) {
     ]);
   } else if (view === "organizations") {
     title.textContent = "Organizations";
-    columns = ["Org ID", "Organization", "Type", "Treasury", "Payroll Burden", "Status", "Actions"];
+    columns = ["Org ID", "Organization", "Type", "Treasury", "Budget", "Health", "Status", "Actions"];
     rows = safeArray(store.organizations)
       .filter((organization) => {
         const treasury = safeArray(store.accounts).find((account) => account.account_id === organization.treasury_account_id);
@@ -660,6 +685,9 @@ function renderTable(view) {
           organization.treasury_account_id || "",
           treasury ? String(treasury.balance) : "",
           String(burden),
+          String(organization.budget_amount || 0),
+          String(organization.reserve_target || 0),
+          organization.budget_cycle || "",
           organization.status,
           organization.notes || ""
         ]);
@@ -670,14 +698,16 @@ function renderTable(view) {
         const burden = getOrganizationPayrollBurden(store, organization.organization_id);
         const treasuryBalance = Number(treasury?.balance || 0);
         const treasuryTone = burden > 0 && treasuryBalance < burden ? "alert" : "";
+        const budgetAmount = Number(organization.budget_amount || 0);
+        const reserveTarget = Number(organization.reserve_target || 0);
+        const health = getOrganizationHealth(store, organization);
         return [
           organization.organization_id,
           `${organization.name}${organization.department_name ? `<br><span class="dim-copy">${organization.department_name}</span>` : ""}${state.session?.role === "platform_admin" ? `<br><span class="dim-copy">${tenant?.name || organization.tenant_id}</span>` : ""}`,
           { chip: organization.organization_type, tone: organization.organization_type === "GOVERNMENT" ? "dim" : "" },
           `${organization.treasury_account_id || "UNASSIGNED"}<br><span class="dim-copy ${treasuryTone}">L$${treasuryBalance}</span>`,
-          burden > 0
-            ? { chip: `L$${burden}`, tone: treasuryBalance < burden ? "alert" : "" }
-            : { chip: "NONE", tone: "dim" },
+          `${budgetAmount > 0 ? `L$${budgetAmount}` : "UNSET"}<br><span class="dim-copy">${organization.budget_cycle || "MONTHLY"} / Reserve L$${reserveTarget}</span><br><span class="dim-copy">Payroll L$${burden}</span>`,
+          { chip: health.label, tone: health.tone },
           { chip: organization.status, tone: organization.status === "ACTIVE" ? "" : "dim" },
           {
             actions: [
@@ -1275,6 +1305,31 @@ async function runOrganizationAction(kind, organizationId) {
       addLog("Opening treasury balance must be zero or greater.");
       return;
     }
+    const budgetCycle = window.prompt("Budget cycle (NONE, WEEKLY, MONTHLY, QUARTERLY, ANNUAL):", "MONTHLY");
+    if (!budgetCycle || !budgetCycle.trim()) {
+      addLog("Organization creation canceled.");
+      return;
+    }
+    const budgetRaw = window.prompt("Department budget amount (0 for none):", "0");
+    if (budgetRaw === null) {
+      addLog("Organization creation canceled.");
+      return;
+    }
+    const budgetAmount = Number(budgetRaw);
+    if (!Number.isFinite(budgetAmount) || budgetAmount < 0) {
+      addLog("Budget amount must be zero or greater.");
+      return;
+    }
+    const reserveRaw = window.prompt("Reserve target amount (0 for none):", "0");
+    if (reserveRaw === null) {
+      addLog("Organization creation canceled.");
+      return;
+    }
+    const reserveTarget = Number(reserveRaw);
+    if (!Number.isFinite(reserveTarget) || reserveTarget < 0) {
+      addLog("Reserve target must be zero or greater.");
+      return;
+    }
     const notes = window.prompt("Notes (optional):", "");
     if (notes === null) {
       addLog("Organization creation canceled.");
@@ -1287,6 +1342,9 @@ async function runOrganizationAction(kind, organizationId) {
       organization_type: type.trim().toUpperCase(),
       department_name: String(department || "").trim(),
       opening_balance: openingBalance,
+      budget_cycle: budgetCycle.trim().toUpperCase(),
+      budget_amount: budgetAmount,
+      reserve_target: reserveTarget,
       notes: String(notes || "").trim()
     });
     if (!result.ok) {
@@ -1413,6 +1471,34 @@ async function runOrganizationAction(kind, organizationId) {
       addLog("Organization update canceled.");
       return;
     }
+    const budgetCycle = window.prompt(
+      "Budget cycle (NONE, WEEKLY, MONTHLY, QUARTERLY, ANNUAL):",
+      organization.budget_cycle || "MONTHLY"
+    );
+    if (!budgetCycle || !budgetCycle.trim()) {
+      addLog("Organization update canceled.");
+      return;
+    }
+    const budgetRaw = window.prompt("Department budget amount (0 for none):", String(organization.budget_amount || 0));
+    if (budgetRaw === null) {
+      addLog("Organization update canceled.");
+      return;
+    }
+    const budgetAmount = Number(budgetRaw);
+    if (!Number.isFinite(budgetAmount) || budgetAmount < 0) {
+      addLog("Budget amount must be zero or greater.");
+      return;
+    }
+    const reserveRaw = window.prompt("Reserve target amount (0 for none):", String(organization.reserve_target || 0));
+    if (reserveRaw === null) {
+      addLog("Organization update canceled.");
+      return;
+    }
+    const reserveTarget = Number(reserveRaw);
+    if (!Number.isFinite(reserveTarget) || reserveTarget < 0) {
+      addLog("Reserve target must be zero or greater.");
+      return;
+    }
     const notes = window.prompt("Notes (optional):", organization.notes || "");
     if (notes === null) {
       addLog("Organization update canceled.");
@@ -1425,6 +1511,9 @@ async function runOrganizationAction(kind, organizationId) {
       name: name.trim(),
       organization_type: type.trim().toUpperCase(),
       department_name: String(department || "").trim(),
+      budget_cycle: budgetCycle.trim().toUpperCase(),
+      budget_amount: budgetAmount,
+      reserve_target: reserveTarget,
       notes: String(notes || "").trim()
     });
     if (!result.ok) {
