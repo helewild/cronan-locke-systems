@@ -25,6 +25,8 @@ const state = {
   selectedAccountId: null
 };
 
+let actionModalResolver = null;
+
 const STAFF_ROLE_HELP = {
   platform_admin: {
     title: "Platform Admin",
@@ -183,6 +185,61 @@ function openStaffModal() {
 function closeStaffModal() {
   document.getElementById("staff-modal").classList.add("hidden");
   document.getElementById("staff-modal").setAttribute("aria-hidden", "true");
+}
+
+function renderActionField(field) {
+  const id = `action-field-${field.name}`;
+  const value = typeof field.value === "undefined" || field.value === null ? "" : field.value;
+  if (field.type === "select") {
+    const options = safeArray(field.options).map((option) => {
+      const optionValue = typeof option === "string" ? option : option.value;
+      const optionLabel = typeof option === "string" ? option : option.label;
+      return `<option value="${optionValue}" ${String(optionValue) === String(value) ? "selected" : ""}>${optionLabel}</option>`;
+    }).join("");
+    return `<label>${field.label}<select id="${id}" name="${field.name}" ${field.required ? "required" : ""}>${options}</select></label>`;
+  }
+  if (field.type === "textarea") {
+    return `<label>${field.label}<textarea id="${id}" name="${field.name}" ${field.required ? "required" : ""} placeholder="${field.placeholder || ""}">${value}</textarea></label>`;
+  }
+  return `<label>${field.label}<input id="${id}" name="${field.name}" type="${field.type || "text"}" value="${value}" ${field.required ? "required" : ""} placeholder="${field.placeholder || ""}"></label>`;
+}
+
+function closeActionModal(result = null) {
+  document.getElementById("action-modal").classList.add("hidden");
+  document.getElementById("action-modal").setAttribute("aria-hidden", "true");
+  document.getElementById("action-form-fields").innerHTML = "";
+  document.getElementById("action-modal-copy").classList.add("hidden");
+  document.getElementById("action-modal-copy").innerHTML = "";
+  const resolver = actionModalResolver;
+  actionModalResolver = null;
+  if (resolver) {
+    resolver(result);
+  }
+}
+
+function openActionModal(config) {
+  return new Promise((resolve) => {
+    actionModalResolver = resolve;
+    document.getElementById("action-modal-title").textContent = config.title || "Action Form";
+    document.getElementById("action-submit").textContent = config.submitLabel || "Submit";
+    const copy = document.getElementById("action-modal-copy");
+    if (config.copy) {
+      copy.innerHTML = config.copy;
+      copy.classList.remove("hidden");
+    } else {
+      copy.innerHTML = "";
+      copy.classList.add("hidden");
+    }
+    document.getElementById("action-form-fields").innerHTML = safeArray(config.fields).map(renderActionField).join("");
+    document.getElementById("action-modal").classList.remove("hidden");
+    document.getElementById("action-modal").setAttribute("aria-hidden", "false");
+    const firstField = safeArray(config.fields)[0];
+    if (firstField) {
+      window.setTimeout(() => {
+        document.getElementById(`action-field-${firstField.name}`)?.focus();
+      }, 10);
+    }
+  });
 }
 
 function setBridgeMode(label) {
@@ -1071,11 +1128,19 @@ async function enforcePasswordReset() {
     return;
   }
 
-  const nextPassword = window.prompt("Temporary password detected. Enter a new password (8+ characters):", "");
-  if (nextPassword === null) {
+  const values = await openActionModal({
+    title: "Password Reset Required",
+    submitLabel: "Update Password",
+    copy: "This account is using a temporary password. Set a new password to continue.",
+    fields: [
+      { name: "new_password", label: "New Password", type: "password", required: true, value: "" }
+    ]
+  });
+  if (!values) {
     addLog("Password reset still required for this account.");
     return;
   }
+  const nextPassword = String(values.new_password || "");
 
   const result = await bridgeRequest("change_password", {
     token: state.session.token,
@@ -1160,22 +1225,27 @@ async function runAdminAction(actionType, extras = {}) {
 
 async function runAccountAction(kind, accountId) {
   if (kind === "create-account") {
-    const avatarName = window.prompt("Customer avatar or display name:", "");
-    if (!avatarName) {
+    const values = await openActionModal({
+      title: "Create Customer Account",
+      submitLabel: "Create Account",
+      fields: [
+        { name: "avatar_name", label: "Customer Avatar Or Display Name", required: true, value: "" },
+        { name: "opening_deposit", label: "Opening Deposit", type: "number", required: true, value: "0" },
+        { name: "issue_card", label: "Issue Starting Bank Card", type: "select", value: "yes", options: [{ value: "yes", label: "Yes" }, { value: "no", label: "No" }] }
+      ]
+    });
+    if (!values) {
       return;
     }
-    const depositRaw = window.prompt("Opening deposit amount:", "0");
-    if (depositRaw === null) {
-      return;
-    }
-    const openingDeposit = Number(depositRaw);
+    const avatarName = String(values.avatar_name || "").trim();
+    const openingDeposit = Number(values.opening_deposit);
     if (!Number.isFinite(openingDeposit) || openingDeposit < 0) {
       addLog("Opening deposit must be zero or greater.");
       return;
     }
-    const issueCard = window.confirm("Issue a starting bank card for this account?");
+    const issueCard = String(values.issue_card || "yes") === "yes";
     const result = await runAdminAction("create_customer_account", {
-      avatar_name: avatarName.trim(),
+      avatar_name: avatarName,
       opening_deposit: openingDeposit,
       issue_card: issueCard
     });
@@ -1198,19 +1268,24 @@ async function runAccountAction(kind, accountId) {
       addLog("Account record not found.");
       return;
     }
-    const username = window.prompt(`Portal username for ${account.customer_name}:`, account.customer_name.toLowerCase().replace(/\s+/g, ""));
-    if (!username || !username.trim()) {
+    const values = await openActionModal({
+      title: "Create Customer Portal Access",
+      submitLabel: "Create Portal Login",
+      copy: `Create a customer login for <strong>${account.customer_name}</strong>.`,
+      fields: [
+        { name: "username", label: "Portal Username", required: true, value: account.customer_name.toLowerCase().replace(/\s+/g, "") },
+        { name: "password", label: "Temporary Password", type: "password", required: true, value: "changeme123" }
+      ]
+    });
+    if (!values) {
       addLog("Customer portal creation canceled.");
       return;
     }
-    const password = window.prompt("Temporary portal password:", "changeme123");
-    if (!password) {
-      addLog("Customer portal creation canceled.");
-      return;
-    }
+    const username = String(values.username || "").trim();
+    const password = String(values.password || "");
     const result = await runAdminAction("create_customer_portal_user", {
       account_id: accountId,
-      new_username: username.trim(),
+      new_username: username,
       new_password: password
     });
     if (!result.ok) {
@@ -1228,11 +1303,17 @@ async function runAccountAction(kind, accountId) {
   }
 
   if (kind === "deposit" || kind === "withdraw") {
-    const raw = window.prompt(`Enter ${kind} amount in Linden dollars:`, "100");
-    if (raw === null) {
+    const values = await openActionModal({
+      title: `${kind === "deposit" ? "Deposit Funds" : "Withdraw Funds"}`,
+      submitLabel: kind === "deposit" ? "Apply Deposit" : "Apply Withdrawal",
+      fields: [
+        { name: "amount", label: "Amount", type: "number", required: true, value: "100" }
+      ]
+    });
+    if (!values) {
       return;
     }
-    const amount = Number(raw);
+    const amount = Number(values.amount);
     if (!amount || amount < 1) {
       addLog("Amount must be greater than zero.");
       return;
@@ -1312,11 +1393,17 @@ async function runLoanAction(loanId) {
     return;
   }
 
-  const raw = window.prompt("Enter loan payment amount in Linden dollars:", "75");
-  if (raw === null) {
+  const values = await openActionModal({
+    title: "Loan Payment",
+    submitLabel: "Apply Payment",
+    fields: [
+      { name: "amount", label: "Payment Amount", type: "number", required: true, value: "75" }
+    ]
+  });
+  if (!values) {
     return;
   }
-  const amount = Number(raw);
+  const amount = Number(values.amount);
   if (!amount || amount < 1) {
     addLog("Loan payment amount must be greater than zero.");
     return;
@@ -1393,87 +1480,62 @@ async function submitStaffCreate(event) {
 
 async function runOrganizationAction(kind, organizationId) {
   if (kind === "create-organization") {
-    let targetTenantId = "";
+    const fields = [];
     if (state.session?.role === "platform_admin") {
-      targetTenantId = window.prompt("Target tenant ID:", safeArray(state.store?.tenants)[0]?.tenant_id || "demo-tenant") || "";
-      if (!targetTenantId.trim()) {
-        addLog("Organization creation canceled.");
-        return;
-      }
+      fields.push({ name: "target_tenant_id", label: "Target Tenant ID", required: true, value: safeArray(state.store?.tenants)[0]?.tenant_id || "demo-tenant" });
     }
-    const name = window.prompt("Organization or department name:", "");
-    if (!name || !name.trim()) {
+    fields.push(
+      { name: "name", label: "Organization Or Department Name", required: true, value: "" },
+      { name: "organization_type", label: "Organization Type", type: "select", required: true, value: "BUSINESS", options: ["BUSINESS", "GOVERNMENT", "DEPARTMENT", "NONPROFIT"] },
+      { name: "department_name", label: "Department Or Division Name", value: "" },
+      { name: "opening_balance", label: "Opening Treasury Balance", type: "number", required: true, value: "0" },
+      { name: "budget_cycle", label: "Budget Cycle", type: "select", required: true, value: "MONTHLY", options: ["NONE", "WEEKLY", "MONTHLY", "QUARTERLY", "ANNUAL"] },
+      { name: "budget_amount", label: "Department Budget Amount", type: "number", required: true, value: "0" },
+      { name: "reserve_target", label: "Reserve Target Amount", type: "number", required: true, value: "0" },
+      { name: "notes", label: "Notes", type: "textarea", value: "" }
+    );
+    const values = await openActionModal({
+      title: "Create Organization",
+      submitLabel: "Create Organization",
+      fields
+    });
+    if (!values) {
       addLog("Organization creation canceled.");
       return;
     }
-    const type = window.prompt("Organization type (BUSINESS, GOVERNMENT, DEPARTMENT, NONPROFIT):", "BUSINESS");
-    if (!type || !type.trim()) {
-      addLog("Organization creation canceled.");
-      return;
-    }
-    const department = window.prompt("Department or division name (optional):", "");
-    if (department === null) {
-      addLog("Organization creation canceled.");
-      return;
-    }
-    const openingRaw = window.prompt("Opening treasury balance:", "0");
-    if (openingRaw === null) {
-      addLog("Organization creation canceled.");
-      return;
-    }
-    const openingBalance = Number(openingRaw);
+    const openingBalance = Number(values.opening_balance);
     if (!Number.isFinite(openingBalance) || openingBalance < 0) {
       addLog("Opening treasury balance must be zero or greater.");
       return;
     }
-    const budgetCycle = window.prompt("Budget cycle (NONE, WEEKLY, MONTHLY, QUARTERLY, ANNUAL):", "MONTHLY");
-    if (!budgetCycle || !budgetCycle.trim()) {
-      addLog("Organization creation canceled.");
-      return;
-    }
-    const budgetRaw = window.prompt("Department budget amount (0 for none):", "0");
-    if (budgetRaw === null) {
-      addLog("Organization creation canceled.");
-      return;
-    }
-    const budgetAmount = Number(budgetRaw);
+    const budgetAmount = Number(values.budget_amount);
     if (!Number.isFinite(budgetAmount) || budgetAmount < 0) {
       addLog("Budget amount must be zero or greater.");
       return;
     }
-    const reserveRaw = window.prompt("Reserve target amount (0 for none):", "0");
-    if (reserveRaw === null) {
-      addLog("Organization creation canceled.");
-      return;
-    }
-    const reserveTarget = Number(reserveRaw);
+    const reserveTarget = Number(values.reserve_target);
     if (!Number.isFinite(reserveTarget) || reserveTarget < 0) {
       addLog("Reserve target must be zero or greater.");
       return;
     }
-    const notes = window.prompt("Notes (optional):", "");
-    if (notes === null) {
-      addLog("Organization creation canceled.");
-      return;
-    }
 
     const result = await runAdminAction("create_organization", {
-      target_tenant_id: targetTenantId.trim(),
-      name: name.trim(),
-      organization_type: type.trim().toUpperCase(),
-      department_name: String(department || "").trim(),
+      target_tenant_id: String(values.target_tenant_id || "").trim(),
+      name: String(values.name || "").trim(),
+      organization_type: String(values.organization_type || "").trim().toUpperCase(),
+      department_name: String(values.department_name || "").trim(),
       opening_balance: openingBalance,
-      budget_cycle: budgetCycle.trim().toUpperCase(),
+      budget_cycle: String(values.budget_cycle || "").trim().toUpperCase(),
       budget_amount: budgetAmount,
       reserve_target: reserveTarget,
-      notes: String(notes || "").trim()
+      notes: String(values.notes || "").trim()
     });
     if (!result.ok) {
       addLog(result.error || "Organization creation failed.");
       return;
     }
     applyStore(result.store);
-    addLog(result.message || `Organization ${name.trim()} created.`);
+    addLog(result.message || `Organization ${String(values.name || "").trim()} created.`);
     return;
   }
 
@@ -1484,22 +1546,22 @@ async function runOrganizationAction(kind, organizationId) {
   }
 
   if (kind === "fund-organization" || kind === "spend-organization") {
-    const amountRaw = window.prompt(
-      `${kind === "fund-organization" ? "Fund" : "Spend"} amount for ${organization.name}:`,
-      kind === "fund-organization" ? "500" : "250"
-    );
-    if (amountRaw === null) {
+    const values = await openActionModal({
+      title: kind === "fund-organization" ? "Fund Organization Treasury" : "Record Treasury Spend",
+      submitLabel: kind === "fund-organization" ? "Apply Funding" : "Record Spend",
+      copy: `<strong>${organization.name}</strong>`,
+      fields: [
+        { name: "amount", label: "Amount", type: "number", required: true, value: kind === "fund-organization" ? "500" : "250" },
+        { name: "memo", label: "Memo Or Reason", type: "textarea", value: "" }
+      ]
+    });
+    if (!values) {
       addLog(`Organization ${kind === "fund-organization" ? "funding" : "spend"} canceled.`);
       return;
     }
-    const amount = Number(amountRaw);
+    const amount = Number(values.amount);
     if (!Number.isFinite(amount) || amount <= 0) {
       addLog("Treasury amount must be greater than zero.");
-      return;
-    }
-    const memo = window.prompt("Memo or reason (optional):", "");
-    if (memo === null) {
-      addLog(`Organization ${kind === "fund-organization" ? "funding" : "spend"} canceled.`);
       return;
     }
 
@@ -1509,7 +1571,7 @@ async function runOrganizationAction(kind, organizationId) {
         target_tenant_id: organization.tenant_id,
         organization_id: organizationId,
         amount,
-        memo: String(memo || "").trim()
+        memo: String(values.memo || "").trim()
       }
     );
     if (!result.ok) {
@@ -1530,33 +1592,35 @@ async function runOrganizationAction(kind, organizationId) {
       addLog("No other organizations are available for transfer.");
       return;
     }
-    const suggestion = candidates[0]?.organization_id || "";
-    const targetOrganizationId = window.prompt(
-      `Transfer from ${organization.name} to organization ID:`,
-      suggestion
-    );
-    if (!targetOrganizationId || !targetOrganizationId.trim()) {
+    const values = await openActionModal({
+      title: "Transfer Treasury Funds",
+      submitLabel: "Transfer Funds",
+      copy: `<strong>Source:</strong> ${organization.name}`,
+      fields: [
+        {
+          name: "target_organization_id",
+          label: "Target Organization",
+          type: "select",
+          required: true,
+          value: candidates[0]?.organization_id || "",
+          options: candidates.map((item) => ({ value: item.organization_id, label: `${item.organization_id} - ${item.name}` }))
+        },
+        { name: "amount", label: "Transfer Amount", type: "number", required: true, value: "250" },
+        { name: "memo", label: "Transfer Memo", type: "textarea", value: `Budget transfer to ${candidates[0]?.name || ""}` }
+      ]
+    });
+    if (!values) {
       addLog("Organization transfer canceled.");
       return;
     }
-    const targetOrganization = candidates.find((item) => item.organization_id === targetOrganizationId.trim());
+    const targetOrganization = candidates.find((item) => item.organization_id === String(values.target_organization_id || "").trim());
     if (!targetOrganization) {
       addLog("Target organization not found in this tenant.");
       return;
     }
-    const amountRaw = window.prompt(`Transfer amount to ${targetOrganization.name}:`, "250");
-    if (amountRaw === null) {
-      addLog("Organization transfer canceled.");
-      return;
-    }
-    const amount = Number(amountRaw);
+    const amount = Number(values.amount);
     if (!Number.isFinite(amount) || amount <= 0) {
       addLog("Transfer amount must be greater than zero.");
-      return;
-    }
-    const memo = window.prompt("Transfer memo (optional):", `Budget transfer to ${targetOrganization.name}`);
-    if (memo === null) {
-      addLog("Organization transfer canceled.");
       return;
     }
 
@@ -1565,7 +1629,7 @@ async function runOrganizationAction(kind, organizationId) {
       organization_id: organizationId,
       target_organization_id: targetOrganization.organization_id,
       amount,
-      memo: String(memo || "").trim()
+      memo: String(values.memo || "").trim()
     });
     if (!result.ok) {
       addLog(result.error || "Organization transfer failed.");
@@ -1577,65 +1641,44 @@ async function runOrganizationAction(kind, organizationId) {
   }
 
   if (kind === "edit-organization") {
-    const name = window.prompt("Organization or department name:", organization.name || "");
-    if (!name || !name.trim()) {
+    const values = await openActionModal({
+      title: "Edit Organization",
+      submitLabel: "Save Changes",
+      fields: [
+        { name: "name", label: "Organization Or Department Name", required: true, value: organization.name || "" },
+        { name: "organization_type", label: "Organization Type", type: "select", required: true, value: organization.organization_type || "BUSINESS", options: ["BUSINESS", "GOVERNMENT", "DEPARTMENT", "NONPROFIT"] },
+        { name: "department_name", label: "Department Or Division Name", value: organization.department_name || "" },
+        { name: "budget_cycle", label: "Budget Cycle", type: "select", required: true, value: organization.budget_cycle || "MONTHLY", options: ["NONE", "WEEKLY", "MONTHLY", "QUARTERLY", "ANNUAL"] },
+        { name: "budget_amount", label: "Department Budget Amount", type: "number", required: true, value: String(organization.budget_amount || 0) },
+        { name: "reserve_target", label: "Reserve Target Amount", type: "number", required: true, value: String(organization.reserve_target || 0) },
+        { name: "notes", label: "Notes", type: "textarea", value: organization.notes || "" }
+      ]
+    });
+    if (!values) {
       addLog("Organization update canceled.");
       return;
     }
-    const type = window.prompt("Organization type (BUSINESS, GOVERNMENT, DEPARTMENT, NONPROFIT):", organization.organization_type || "BUSINESS");
-    if (!type || !type.trim()) {
-      addLog("Organization update canceled.");
-      return;
-    }
-    const department = window.prompt("Department or division name (optional):", organization.department_name || "");
-    if (department === null) {
-      addLog("Organization update canceled.");
-      return;
-    }
-    const budgetCycle = window.prompt(
-      "Budget cycle (NONE, WEEKLY, MONTHLY, QUARTERLY, ANNUAL):",
-      organization.budget_cycle || "MONTHLY"
-    );
-    if (!budgetCycle || !budgetCycle.trim()) {
-      addLog("Organization update canceled.");
-      return;
-    }
-    const budgetRaw = window.prompt("Department budget amount (0 for none):", String(organization.budget_amount || 0));
-    if (budgetRaw === null) {
-      addLog("Organization update canceled.");
-      return;
-    }
-    const budgetAmount = Number(budgetRaw);
+    const budgetAmount = Number(values.budget_amount);
     if (!Number.isFinite(budgetAmount) || budgetAmount < 0) {
       addLog("Budget amount must be zero or greater.");
       return;
     }
-    const reserveRaw = window.prompt("Reserve target amount (0 for none):", String(organization.reserve_target || 0));
-    if (reserveRaw === null) {
-      addLog("Organization update canceled.");
-      return;
-    }
-    const reserveTarget = Number(reserveRaw);
+    const reserveTarget = Number(values.reserve_target);
     if (!Number.isFinite(reserveTarget) || reserveTarget < 0) {
       addLog("Reserve target must be zero or greater.");
-      return;
-    }
-    const notes = window.prompt("Notes (optional):", organization.notes || "");
-    if (notes === null) {
-      addLog("Organization update canceled.");
       return;
     }
 
     const result = await runAdminAction("update_organization", {
       target_tenant_id: organization.tenant_id,
       organization_id: organizationId,
-      name: name.trim(),
-      organization_type: type.trim().toUpperCase(),
-      department_name: String(department || "").trim(),
-      budget_cycle: budgetCycle.trim().toUpperCase(),
+      name: String(values.name || "").trim(),
+      organization_type: String(values.organization_type || "").trim().toUpperCase(),
+      department_name: String(values.department_name || "").trim(),
+      budget_cycle: String(values.budget_cycle || "").trim().toUpperCase(),
       budget_amount: budgetAmount,
       reserve_target: reserveTarget,
-      notes: String(notes || "").trim()
+      notes: String(values.notes || "").trim()
     });
     if (!result.ok) {
       addLog(result.error || "Organization update failed.");
@@ -1667,56 +1710,38 @@ async function runOrganizationAction(kind, organizationId) {
 
 async function runEmploymentAction(kind, employmentId) {
   if (kind === "create-employment") {
-    const accountId = window.prompt("Account ID to employ:", state.selectedAccountId || "");
-    if (!accountId || !accountId.trim()) {
+    const organizations = safeArray(state.store?.organizations);
+    const values = await openActionModal({
+      title: "Create Employment Record",
+      submitLabel: "Create Job",
+      fields: [
+        { name: "account_id", label: "Account ID", required: true, value: state.selectedAccountId || "" },
+        { name: "organization_id", label: "Organization", type: "select", value: organizations[0]?.organization_id || "", options: [{ value: "", label: "None / manual employer" }, ...organizations.map((item) => ({ value: item.organization_id, label: `${item.organization_id} - ${item.name}` }))] },
+        { name: "employer_name", label: "Employer Or Business Name", required: true, value: organizations[0]?.name || "Whispering Pines Bank" },
+        { name: "department_name", label: "Department Name", value: organizations[0]?.department_name || "Banking" },
+        { name: "title", label: "Job Title", required: true, value: "Teller" },
+        { name: "pay_rate", label: "Pay Rate Per Payroll Run", type: "number", required: true, value: "250" },
+        { name: "pay_cycle", label: "Pay Cycle", type: "select", required: true, value: "WEEKLY", options: ["WEEKLY", "BIWEEKLY", "MONTHLY"] }
+      ]
+    });
+    if (!values) {
       addLog("Employment creation canceled.");
       return;
     }
-    const organizationId = window.prompt("Organization ID (optional, recommended):", safeArray(state.store?.organizations)[0]?.organization_id || "");
-    if (organizationId === null) {
-      addLog("Employment creation canceled.");
-      return;
-    }
-    const organization = safeArray(state.store?.organizations).find((item) => item.organization_id === String(organizationId || "").trim());
-    const employerName = window.prompt("Employer or business name:", organization?.name || "Whispering Pines Bank");
-    if (!employerName || !employerName.trim()) {
-      addLog("Employment creation canceled.");
-      return;
-    }
-    const departmentName = window.prompt("Department name:", organization?.department_name || "Banking");
-    if (departmentName === null) {
-      addLog("Employment creation canceled.");
-      return;
-    }
-    const title = window.prompt("Job title:", "Teller");
-    if (!title || !title.trim()) {
-      addLog("Employment creation canceled.");
-      return;
-    }
-    const payRaw = window.prompt("Pay rate per payroll run:", "250");
-    if (payRaw === null) {
-      addLog("Employment creation canceled.");
-      return;
-    }
-    const payRate = Number(payRaw);
+    const payRate = Number(values.pay_rate);
     if (!payRate || payRate < 1) {
       addLog("Pay rate must be greater than zero.");
       return;
     }
-    const cycle = window.prompt("Pay cycle:", "WEEKLY");
-    if (!cycle || !cycle.trim()) {
-      addLog("Employment creation canceled.");
-      return;
-    }
 
     const result = await runAdminAction("create_employment", {
-      account_id: accountId.trim(),
-      organization_id: String(organizationId || "").trim(),
-      employer_name: employerName.trim(),
-      department_name: String(departmentName || "").trim(),
-      title: title.trim(),
+      account_id: String(values.account_id || "").trim(),
+      organization_id: String(values.organization_id || "").trim(),
+      employer_name: String(values.employer_name || "").trim(),
+      department_name: String(values.department_name || "").trim(),
+      title: String(values.title || "").trim(),
       pay_rate: payRate,
-      pay_cycle: cycle.trim().toUpperCase()
+      pay_cycle: String(values.pay_cycle || "").trim().toUpperCase()
     });
     if (!result.ok) {
       addLog(result.error || "Employment creation failed.");
@@ -1738,51 +1763,37 @@ async function runEmploymentAction(kind, employmentId) {
       addLog("Employment record not found.");
       return;
     }
-    const organizationId = window.prompt("Organization ID (optional, recommended):", employment.organization_id || "");
-    if (organizationId === null) {
+    const organizations = safeArray(state.store?.organizations);
+    const values = await openActionModal({
+      title: "Edit Employment Record",
+      submitLabel: "Save Job",
+      fields: [
+        { name: "organization_id", label: "Organization", type: "select", value: employment.organization_id || "", options: [{ value: "", label: "None / manual employer" }, ...organizations.map((item) => ({ value: item.organization_id, label: `${item.organization_id} - ${item.name}` }))] },
+        { name: "employer_name", label: "Employer Or Business Name", required: true, value: employment.employer_name || "" },
+        { name: "department_name", label: "Department Name", value: employment.department_name || "" },
+        { name: "title", label: "Job Title", required: true, value: employment.title || "" },
+        { name: "pay_rate", label: "Pay Rate Per Payroll Run", type: "number", required: true, value: String(employment.pay_rate || 0) },
+        { name: "pay_cycle", label: "Pay Cycle", type: "select", required: true, value: employment.pay_cycle || "WEEKLY", options: ["WEEKLY", "BIWEEKLY", "MONTHLY"] }
+      ]
+    });
+    if (!values) {
       addLog("Employment update canceled.");
       return;
     }
-    const organization = safeArray(state.store?.organizations).find((item) => item.organization_id === String(organizationId || "").trim());
-    const employerName = window.prompt("Employer or business name:", organization?.name || employment.employer_name || "");
-    if (!employerName || !employerName.trim()) {
-      addLog("Employment update canceled.");
-      return;
-    }
-    const departmentName = window.prompt("Department name:", organization?.department_name || employment.department_name || "");
-    if (departmentName === null) {
-      addLog("Employment update canceled.");
-      return;
-    }
-    const title = window.prompt("Job title:", employment.title || "");
-    if (!title || !title.trim()) {
-      addLog("Employment update canceled.");
-      return;
-    }
-    const payRaw = window.prompt("Pay rate per payroll run:", String(employment.pay_rate || 0));
-    if (payRaw === null) {
-      addLog("Employment update canceled.");
-      return;
-    }
-    const payRate = Number(payRaw);
+    const payRate = Number(values.pay_rate);
     if (!payRate || payRate < 1) {
       addLog("Pay rate must be greater than zero.");
-      return;
-    }
-    const cycle = window.prompt("Pay cycle:", employment.pay_cycle || "WEEKLY");
-    if (!cycle || !cycle.trim()) {
-      addLog("Employment update canceled.");
       return;
     }
 
     const result = await runAdminAction("update_employment", {
       employment_id: employmentId,
-      organization_id: String(organizationId || "").trim(),
-      employer_name: employerName.trim(),
-      department_name: String(departmentName || "").trim(),
-      title: title.trim(),
+      organization_id: String(values.organization_id || "").trim(),
+      employer_name: String(values.employer_name || "").trim(),
+      department_name: String(values.department_name || "").trim(),
+      title: String(values.title || "").trim(),
       pay_rate: payRate,
-      pay_cycle: cycle.trim().toUpperCase()
+      pay_cycle: String(values.pay_cycle || "").trim().toUpperCase()
     });
     if (!result.ok) {
       addLog(result.error || "Employment update failed.");
@@ -1823,29 +1834,26 @@ async function runTenantAction(kind, tenantId) {
       addLog("Target tenant was not found.");
       return;
     }
-    const tenantName = window.prompt("Tenant display name:", tenant.name || "");
-    if (tenantName === null) {
-      return;
-    }
-    const bankName = window.prompt("Bank display name:", tenant.bank_name || "");
-    if (bankName === null) {
-      return;
-    }
-    const regionName = window.prompt("Primary region name:", tenant.primary_region_name || "");
-    if (regionName === null) {
-      return;
-    }
-    const payrollRaw = window.prompt("Default payroll amount:", String(tenant.payroll_default_amount ?? 250));
-    if (payrollRaw === null) {
+    const values = await openActionModal({
+      title: "Edit Tenant",
+      submitLabel: "Save Tenant",
+      fields: [
+        { name: "tenant_name", label: "Tenant Display Name", required: true, value: tenant.name || "" },
+        { name: "bank_name", label: "Bank Display Name", required: true, value: tenant.bank_name || "" },
+        { name: "primary_region_name", label: "Primary Region Name", required: true, value: tenant.primary_region_name || "" },
+        { name: "payroll_default_amount", label: "Default Payroll Amount", type: "number", required: true, value: String(tenant.payroll_default_amount ?? 250) }
+      ]
+    });
+    if (!values) {
       return;
     }
 
     const result = await runAdminAction("update_tenant_settings", {
       target_tenant_id: tenantId,
-      tenant_name: tenantName.trim(),
-      bank_name: bankName.trim(),
-      primary_region_name: regionName.trim(),
-      payroll_default_amount: Number(payrollRaw)
+      tenant_name: String(values.tenant_name || "").trim(),
+      bank_name: String(values.bank_name || "").trim(),
+      primary_region_name: String(values.primary_region_name || "").trim(),
+      payroll_default_amount: Number(values.payroll_default_amount)
     });
     if (!result.ok) {
       addLog(result.error || "Tenant update failed.");
@@ -1888,12 +1896,18 @@ async function runTenantAction(kind, tenantId) {
   };
 
   if (kind === "extend-license") {
-    const raw = window.prompt("Extend license by how many days?", "30");
-    if (raw === null) {
+    const values = await openActionModal({
+      title: "Extend License",
+      submitLabel: "Extend License",
+      fields: [
+        { name: "days", label: "Extend By How Many Days?", type: "number", required: true, value: "30" }
+      ]
+    });
+    if (!values) {
       addLog(`License extension canceled for ${tenantId}.`);
       return;
     }
-    const days = Number(raw);
+    const days = Number(values.days);
     if (!days || days < 1) {
       addLog("License extension must be at least 1 day.");
       return;
@@ -2158,58 +2172,53 @@ function wireAdminActions() {
 
   document.getElementById("manage-tenant-btn").addEventListener("click", async () => {
     if (state.session?.role === "platform_admin") {
-      const tenantName = window.prompt("New tenant display name:", "");
-      if (!tenantName || !tenantName.trim()) {
-        addLog("Platform tenant creation canceled.");
-        return;
-      }
-      const bankName = window.prompt("New bank display name:", tenantName.trim() + " Bank");
-      if (!bankName || !bankName.trim()) {
-        addLog("Platform tenant creation canceled.");
-        return;
-      }
-      const ownerAvatar = window.prompt("Owner avatar or operator name:", "");
-      if (ownerAvatar === null) {
+      const values = await openActionModal({
+        title: "Create Tenant",
+        submitLabel: "Create Tenant",
+        fields: [
+          { name: "tenant_name", label: "Tenant Display Name", required: true, value: "" },
+          { name: "bank_name", label: "Bank Display Name", required: true, value: "" },
+          { name: "owner_avatar_name", label: "Owner Avatar Or Operator Name", value: "" }
+        ]
+      });
+      if (!values) {
         addLog("Platform tenant creation canceled.");
         return;
       }
       const result = await runAdminAction("create_tenant", {
-        tenant_name: tenantName.trim(),
-        bank_name: bankName.trim(),
-        owner_avatar_name: String(ownerAvatar || "").trim()
+        tenant_name: String(values.tenant_name || "").trim(),
+        bank_name: String(values.bank_name || "").trim(),
+        owner_avatar_name: String(values.owner_avatar_name || "").trim()
       });
       if (!result.ok) {
         addLog(result.error || "Platform tenant creation failed.");
         return;
       }
       applyStore(result.store);
-      addLog(result.message || `Created tenant ${tenantName.trim()}.`);
+      addLog(result.message || `Created tenant ${String(values.tenant_name || "").trim()}.`);
       return;
     }
 
     const tenant = getCurrentTenant();
-    const tenantName = window.prompt("Tenant display name:", tenant?.name || "");
-    if (tenantName === null) {
-      return;
-    }
-    const bankName = window.prompt("Bank display name:", tenant?.bank_name || "");
-    if (bankName === null) {
-      return;
-    }
-    const regionName = window.prompt("Primary region name:", tenant?.primary_region_name || "");
-    if (regionName === null) {
-      return;
-    }
-    const payrollRaw = window.prompt("Default payroll amount:", String(tenant?.payroll_default_amount || 250));
-    if (payrollRaw === null) {
+    const values = await openActionModal({
+      title: "Manage Tenant",
+      submitLabel: "Save Tenant Settings",
+      fields: [
+        { name: "tenant_name", label: "Tenant Display Name", required: true, value: tenant?.name || "" },
+        { name: "bank_name", label: "Bank Display Name", required: true, value: tenant?.bank_name || "" },
+        { name: "primary_region_name", label: "Primary Region Name", required: true, value: tenant?.primary_region_name || "" },
+        { name: "payroll_default_amount", label: "Default Payroll Amount", type: "number", required: true, value: String(tenant?.payroll_default_amount || 250) }
+      ]
+    });
+    if (!values) {
       return;
     }
 
     const result = await runAdminAction("update_tenant_settings", {
-      tenant_name: tenantName.trim(),
-      bank_name: bankName.trim(),
-      primary_region_name: regionName.trim(),
-      payroll_default_amount: Number(payrollRaw)
+      tenant_name: String(values.tenant_name || "").trim(),
+      bank_name: String(values.bank_name || "").trim(),
+      primary_region_name: String(values.primary_region_name || "").trim(),
+      payroll_default_amount: Number(values.payroll_default_amount)
     });
     if (!result.ok) {
       addLog(result.error || "Tenant management request failed.");
@@ -2223,32 +2232,30 @@ function wireAdminActions() {
 
   document.getElementById("view-action-btn").addEventListener("click", async () => {
     if (state.view === "platform") {
-      const tenantName = window.prompt("New tenant display name:", "");
-      if (!tenantName || !tenantName.trim()) {
-        return;
-      }
-      const bankName = window.prompt("New bank display name:", tenantName.trim() + " Bank");
-      if (!bankName || !bankName.trim()) {
-        addLog("Platform tenant creation canceled.");
-        return;
-      }
-      const ownerAvatar = window.prompt("Owner avatar or operator name:", "");
-      if (ownerAvatar === null) {
-        addLog("Platform tenant creation canceled.");
+      const values = await openActionModal({
+        title: "Create Tenant",
+        submitLabel: "Create Tenant",
+        fields: [
+          { name: "tenant_name", label: "Tenant Display Name", required: true, value: "" },
+          { name: "bank_name", label: "Bank Display Name", required: true, value: "" },
+          { name: "owner_avatar_name", label: "Owner Avatar Or Operator Name", value: "" }
+        ]
+      });
+      if (!values) {
         return;
       }
 
       const result = await runAdminAction("create_tenant", {
-        tenant_name: tenantName.trim(),
-        bank_name: bankName.trim(),
-        owner_avatar_name: String(ownerAvatar || "").trim()
+        tenant_name: String(values.tenant_name || "").trim(),
+        bank_name: String(values.bank_name || "").trim(),
+        owner_avatar_name: String(values.owner_avatar_name || "").trim()
       });
       if (!result.ok) {
         addLog(result.error || "Tenant creation failed.");
         return;
       }
       applyStore(result.store);
-      addLog(result.message || `Created tenant ${tenantName.trim()}.`);
+      addLog(result.message || `Created tenant ${String(values.tenant_name || "").trim()}.`);
       return;
     }
     if (state.view === "accounts") {
@@ -2286,6 +2293,15 @@ function wireAdminActions() {
   document.getElementById("staff-cancel").addEventListener("click", closeStaffModal);
   document.querySelectorAll("[data-close-modal=\"staff\"]").forEach((node) => {
     node.addEventListener("click", closeStaffModal);
+  });
+  document.getElementById("action-form").addEventListener("submit", (event) => {
+    event.preventDefault();
+    const data = Object.fromEntries(new FormData(event.target).entries());
+    closeActionModal(data);
+  });
+  document.getElementById("action-cancel").addEventListener("click", () => closeActionModal(null));
+  document.querySelectorAll("[data-close-modal=\"action\"]").forEach((node) => {
+    node.addEventListener("click", () => closeActionModal(null));
   });
 }
 

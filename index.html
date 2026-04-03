@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Cronan &amp; Locke Systems</title>
-    <link rel="stylesheet" href="./site.css?v=20260403e">
+    <link rel="stylesheet" href="./site.css?v=20260403f">
   </head>
   <body>
     <div class="machine">
@@ -283,10 +283,25 @@
             </div>
           </div>
         </section>
+
+        <section id="action-modal" class="modal-shell hidden" aria-hidden="true">
+          <div class="modal-backdrop" data-close-modal="action"></div>
+          <div class="modal-card panel">
+            <div id="action-modal-title" class="terminal-title modal-title">Action Form</div>
+            <div id="action-modal-copy" class="helper-card compact-helper hidden"></div>
+            <form id="action-form" class="form-block">
+              <div id="action-form-fields" class="form-block"></div>
+              <div class="modal-actions">
+                <button type="button" id="action-cancel" class="ghost-button">Cancel</button>
+                <button type="submit" id="action-submit" class="submit-button">Submit</button>
+              </div>
+            </form>
+          </div>
+        </section>
       </div>
     </div>
 
-    <script src="./site-config.js?v=20260403e"></script>
-    <script src="./site.js?v=20260403e"></script>
+    <script src="./site-config.js?v=20260403f"></script>
+    <script src="./site.js?v=20260403f"></script>
   </body>
 </html>
