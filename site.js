@@ -113,6 +113,23 @@ function clearSession() {
   state.passwordResetPromptedToken = null;
 }
 
+function isSessionError(message) {
+  const text = String(message || "").toLowerCase();
+  return text.includes("invalid or expired session") || text.includes("login required");
+}
+
+function resetRuntimeLogs(store) {
+  state.logs = [];
+  seedLogs(store || state.store);
+  savePreviewState();
+}
+
+function handleSessionFailure(message) {
+  clearSession();
+  resetRuntimeLogs(state.store);
+  logout(message || "Session expired. Please log in again.");
+}
+
 function setAuthMessage(message, tone) {
   const box = document.getElementById("auth-message");
   box.textContent = message;
@@ -857,6 +874,7 @@ function applySession(session) {
       : (Object.keys(VIEW_PERMISSIONS).find((view) => canAccessView(view)) || "accounts");
     state.view = fallback;
   }
+  resetRuntimeLogs(state.store);
   applyStore(state.store);
   if (session.must_reset_password && state.passwordResetPromptedToken !== session.token) {
     state.passwordResetPromptedToken = session.token;
@@ -897,12 +915,12 @@ async function enforcePasswordReset() {
   addLog(result.message || "Password changed.");
 }
 
-function logout() {
+function logout(message) {
   state.session = null;
   clearSession();
   document.getElementById("admin-shell").classList.add("hidden");
   document.getElementById("auth-shell").classList.remove("hidden");
-  setAuthMessage("Session closed. Login required to access the admin terminal.");
+  setAuthMessage(message || "Session closed. Login required to access the admin terminal.");
 }
 
 async function bridgeRequest(action, payload) {
@@ -924,6 +942,8 @@ async function bridgeRequest(action, payload) {
     const data = await response.json();
     if (data && data.ok) {
       setBridgeMode("APPS SCRIPT");
+    } else if (data && isSessionError(data.error) && action !== "login") {
+      handleSessionFailure(data.error);
     }
     return data;
   } catch (error) {
@@ -946,7 +966,11 @@ async function runAdminAction(actionType, extras = {}) {
     ...extras
   };
 
-  return bridgeRequest("admin_action", payload);
+  const result = await bridgeRequest("admin_action", payload);
+  if (!result.ok && isSessionError(result.error)) {
+    handleSessionFailure(result.error);
+  }
+  return result;
 }
 
 async function runAccountAction(kind, accountId) {
@@ -1605,8 +1629,12 @@ function wireAdminActions() {
         saveSession(result.session);
       }
       applyStore(result.store);
+      addLog("Manual refresh executed for " + state.view.toUpperCase());
+      return;
     }
-    addLog("Manual refresh executed for " + state.view.toUpperCase());
+    if (!isSessionError(result.error)) {
+      addLog(result.error || ("Refresh failed for " + state.view.toUpperCase() + "."));
+    }
   });
 
   document.getElementById("manage-tenant-btn").addEventListener("click", async () => {
@@ -1801,9 +1829,7 @@ async function boot() {
         setInterval(() => setClock("clock-line"), 1000);
         return;
       }
-      clearSession();
-      addLog(result.error || "Saved session is no longer valid.");
-      logout();
+      handleSessionFailure(result.error || "Saved session is no longer valid.");
     }).catch(() => {
       setInterval(() => setClock("clock-line"), 1000);
     });
