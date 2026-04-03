@@ -440,6 +440,12 @@ function getTenantActivity(store, tenantId) {
   return `${String(latest.action || "activity").replaceAll("_", " ")} / ${latest.actor_name || latest.object_type || "system"}`.toUpperCase();
 }
 
+function getOrganizationPayrollBurden(store, organizationId) {
+  return safeArray(store.employments)
+    .filter((employment) => employment.organization_id === organizationId && employment.status === "ACTIVE")
+    .reduce((total, employment) => total + Number(employment.pay_rate || 0), 0);
+}
+
 function ensureSelectedAccount(store) {
   const accounts = safeArray(store.accounts);
   if (!accounts.length) {
@@ -641,10 +647,11 @@ function renderTable(view) {
     ]);
   } else if (view === "organizations") {
     title.textContent = "Organizations";
-    columns = ["Org ID", "Organization", "Type", "Treasury", "Status", "Actions"];
+    columns = ["Org ID", "Organization", "Type", "Treasury", "Payroll Burden", "Status", "Actions"];
     rows = safeArray(store.organizations)
       .filter((organization) => {
         const treasury = safeArray(store.accounts).find((account) => account.account_id === organization.treasury_account_id);
+        const burden = getOrganizationPayrollBurden(store, organization.organization_id);
         return matchesSearch([
           organization.organization_id,
           organization.name,
@@ -652,6 +659,7 @@ function renderTable(view) {
           organization.department_name || "",
           organization.treasury_account_id || "",
           treasury ? String(treasury.balance) : "",
+          String(burden),
           organization.status,
           organization.notes || ""
         ]);
@@ -659,14 +667,23 @@ function renderTable(view) {
       .map((organization) => {
         const treasury = safeArray(store.accounts).find((account) => account.account_id === organization.treasury_account_id);
         const tenant = safeArray(store.tenants).find((item) => item.tenant_id === organization.tenant_id);
+        const burden = getOrganizationPayrollBurden(store, organization.organization_id);
+        const treasuryBalance = Number(treasury?.balance || 0);
+        const treasuryTone = burden > 0 && treasuryBalance < burden ? "alert" : "";
         return [
           organization.organization_id,
           `${organization.name}${organization.department_name ? `<br><span class="dim-copy">${organization.department_name}</span>` : ""}${state.session?.role === "platform_admin" ? `<br><span class="dim-copy">${tenant?.name || organization.tenant_id}</span>` : ""}`,
           { chip: organization.organization_type, tone: organization.organization_type === "GOVERNMENT" ? "dim" : "" },
-          `${organization.treasury_account_id || "UNASSIGNED"}<br><span class="dim-copy">L$${Number(treasury?.balance || 0)}</span>`,
+          `${organization.treasury_account_id || "UNASSIGNED"}<br><span class="dim-copy ${treasuryTone}">L$${treasuryBalance}</span>`,
+          burden > 0
+            ? { chip: `L$${burden}`, tone: treasuryBalance < burden ? "alert" : "" }
+            : { chip: "NONE", tone: "dim" },
           { chip: organization.status, tone: organization.status === "ACTIVE" ? "" : "dim" },
           {
             actions: [
+              { label: "Fund", kind: "fund-organization", organizationId: organization.organization_id, permission: "fund_organization" },
+              { label: "Spend", kind: "spend-organization", organizationId: organization.organization_id, tone: "danger", permission: "spend_organization" },
+              { label: "Transfer", kind: "transfer-organization", organizationId: organization.organization_id, permission: "transfer_organization" },
               { label: "Edit", kind: "edit-organization", organizationId: organization.organization_id, permission: "update_organization" },
               organization.status === "ACTIVE"
                 ? { label: "Deactivate", kind: "deactivate-organization", organizationId: organization.organization_id, tone: "danger", permission: "deactivate_organization" }
@@ -1287,6 +1304,99 @@ async function runOrganizationAction(kind, organizationId) {
     return;
   }
 
+  if (kind === "fund-organization" || kind === "spend-organization") {
+    const amountRaw = window.prompt(
+      `${kind === "fund-organization" ? "Fund" : "Spend"} amount for ${organization.name}:`,
+      kind === "fund-organization" ? "500" : "250"
+    );
+    if (amountRaw === null) {
+      addLog(`Organization ${kind === "fund-organization" ? "funding" : "spend"} canceled.`);
+      return;
+    }
+    const amount = Number(amountRaw);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      addLog("Treasury amount must be greater than zero.");
+      return;
+    }
+    const memo = window.prompt("Memo or reason (optional):", "");
+    if (memo === null) {
+      addLog(`Organization ${kind === "fund-organization" ? "funding" : "spend"} canceled.`);
+      return;
+    }
+
+    const result = await runAdminAction(
+      kind === "fund-organization" ? "fund_organization" : "spend_organization",
+      {
+        target_tenant_id: organization.tenant_id,
+        organization_id: organizationId,
+        amount,
+        memo: String(memo || "").trim()
+      }
+    );
+    if (!result.ok) {
+      addLog(result.error || "Organization treasury action failed.");
+      return;
+    }
+    applyStore(result.store);
+    addLog(
+      result.message || `${kind === "fund-organization" ? "Funded" : "Recorded spend for"} ${organization.name}.`
+    );
+    return;
+  }
+
+  if (kind === "transfer-organization") {
+    const candidates = safeArray(state.store?.organizations)
+      .filter((item) => item.tenant_id === organization.tenant_id && item.organization_id !== organization.organization_id);
+    if (!candidates.length) {
+      addLog("No other organizations are available for transfer.");
+      return;
+    }
+    const suggestion = candidates[0]?.organization_id || "";
+    const targetOrganizationId = window.prompt(
+      `Transfer from ${organization.name} to organization ID:`,
+      suggestion
+    );
+    if (!targetOrganizationId || !targetOrganizationId.trim()) {
+      addLog("Organization transfer canceled.");
+      return;
+    }
+    const targetOrganization = candidates.find((item) => item.organization_id === targetOrganizationId.trim());
+    if (!targetOrganization) {
+      addLog("Target organization not found in this tenant.");
+      return;
+    }
+    const amountRaw = window.prompt(`Transfer amount to ${targetOrganization.name}:`, "250");
+    if (amountRaw === null) {
+      addLog("Organization transfer canceled.");
+      return;
+    }
+    const amount = Number(amountRaw);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      addLog("Transfer amount must be greater than zero.");
+      return;
+    }
+    const memo = window.prompt("Transfer memo (optional):", `Budget transfer to ${targetOrganization.name}`);
+    if (memo === null) {
+      addLog("Organization transfer canceled.");
+      return;
+    }
+
+    const result = await runAdminAction("transfer_organization", {
+      target_tenant_id: organization.tenant_id,
+      organization_id: organizationId,
+      target_organization_id: targetOrganization.organization_id,
+      amount,
+      memo: String(memo || "").trim()
+    });
+    if (!result.ok) {
+      addLog(result.error || "Organization transfer failed.");
+      return;
+    }
+    applyStore(result.store);
+    addLog(result.message || `Transferred L$${amount} from ${organization.name} to ${targetOrganization.name}.`);
+    return;
+  }
+
   if (kind === "edit-organization") {
     const name = window.prompt("Organization or department name:", organization.name || "");
     if (!name || !name.trim()) {
@@ -1746,7 +1856,15 @@ function wireAdminActions() {
       await runEmploymentAction(kind, button.dataset.employmentId);
       return;
     }
-    if (["create-organization", "edit-organization", "deactivate-organization", "reactivate-organization"].includes(kind)) {
+    if ([
+      "create-organization",
+      "fund-organization",
+      "spend-organization",
+      "transfer-organization",
+      "edit-organization",
+      "deactivate-organization",
+      "reactivate-organization"
+    ].includes(kind)) {
       await runOrganizationAction(kind, button.dataset.organizationId);
       return;
     }

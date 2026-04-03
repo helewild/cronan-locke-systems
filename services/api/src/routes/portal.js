@@ -53,6 +53,9 @@ const ROLE_PERMISSIONS = {
     "update_organization",
     "deactivate_organization",
     "reactivate_organization",
+    "fund_organization",
+    "spend_organization",
+    "transfer_organization",
     "delete_tenant",
     "suspend_tenant",
     "activate_tenant",
@@ -103,6 +106,9 @@ const ROLE_PERMISSIONS = {
     "update_organization",
     "deactivate_organization",
     "reactivate_organization",
+    "fund_organization",
+    "spend_organization",
+    "transfer_organization",
     "create_staff_user",
     "disable_staff_user",
     "enable_staff_user",
@@ -141,6 +147,9 @@ const ROLE_PERMISSIONS = {
     "update_organization",
     "deactivate_organization",
     "reactivate_organization",
+    "fund_organization",
+    "spend_organization",
+    "transfer_organization",
     "create_employment",
     "update_employment",
     "terminate_employment",
@@ -1553,6 +1562,127 @@ function updateOrganizationStatus(store, tenantId, actorName, organizationId, ne
   );
 }
 
+function updateOrganizationTreasury(store, tenantId, actorName, organizationId, amountInput, mode, payload = {}) {
+  const organization = findOrganization(store, tenantId, organizationId);
+  if (!organization) {
+    throw new Error("Organization not found.");
+  }
+  if (String(organization.status || "").toUpperCase() !== "ACTIVE") {
+    throw new Error("Organization is not active.");
+  }
+
+  const treasury = findAccount(store, tenantId, organization.treasury_account_id);
+  if (!treasury || !isActive(treasury.status)) {
+    throw new Error("Treasury account is unavailable.");
+  }
+
+  const amount = Number(amountInput || 0);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new Error("Amount must be greater than zero.");
+  }
+
+  const memo = String(payload.memo || "").trim();
+  const note = memo || (mode === "fund" ? "Treasury funded from admin terminal" : "Treasury spend recorded from admin terminal");
+
+  if (mode === "spend" && Number(treasury.balance || 0) < amount) {
+    throw new Error("Insufficient treasury funds.");
+  }
+
+  treasury.balance = Number(treasury.balance || 0) + (mode === "fund" ? amount : -amount);
+
+  createTransaction(store, {
+    account_id: treasury.account_id,
+    type: mode === "fund" ? "TREASURY_DEPOSIT" : "TREASURY_WITHDRAWAL",
+    amount,
+    direction: mode === "fund" ? "IN" : "OUT",
+    memo: note
+  });
+
+  appendPortalAudit(
+    store,
+    actorName,
+    tenantId,
+    "organization",
+    organization.organization_id,
+    treasury.account_id,
+    mode === "fund" ? "organization_fund" : "organization_spend",
+    amount,
+    note
+  );
+}
+
+function transferOrganizationTreasury(store, tenantId, actorName, sourceOrganizationId, targetOrganizationId, amountInput, payload = {}) {
+  const source = findOrganization(store, tenantId, sourceOrganizationId);
+  const target = findOrganization(store, tenantId, targetOrganizationId);
+
+  if (!source || !target) {
+    throw new Error("Organization transfer target not found.");
+  }
+  if (source.organization_id === target.organization_id) {
+    throw new Error("Choose a different target organization.");
+  }
+  if (String(source.status || "").toUpperCase() !== "ACTIVE" || String(target.status || "").toUpperCase() !== "ACTIVE") {
+    throw new Error("Both organizations must be active for transfer.");
+  }
+
+  const sourceTreasury = findAccount(store, tenantId, source.treasury_account_id);
+  const targetTreasury = findAccount(store, tenantId, target.treasury_account_id);
+  if (!sourceTreasury || !targetTreasury || !isActive(sourceTreasury.status) || !isActive(targetTreasury.status)) {
+    throw new Error("Treasury account unavailable for transfer.");
+  }
+
+  const amount = Number(amountInput || 0);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new Error("Transfer amount must be greater than zero.");
+  }
+  if (Number(sourceTreasury.balance || 0) < amount) {
+    throw new Error("Insufficient treasury funds for transfer.");
+  }
+
+  const memo = String(payload.memo || "").trim() || `Treasury transfer to ${target.name}`;
+
+  sourceTreasury.balance = Number(sourceTreasury.balance || 0) - amount;
+  targetTreasury.balance = Number(targetTreasury.balance || 0) + amount;
+
+  createTransaction(store, {
+    account_id: sourceTreasury.account_id,
+    type: "TREASURY_TRANSFER_OUT",
+    amount,
+    direction: "OUT",
+    memo
+  });
+  createTransaction(store, {
+    account_id: targetTreasury.account_id,
+    type: "TREASURY_TRANSFER_IN",
+    amount,
+    direction: "IN",
+    memo: String(payload.memo || "").trim() || `Treasury transfer from ${source.name}`
+  });
+
+  appendPortalAudit(
+    store,
+    actorName,
+    tenantId,
+    "organization",
+    source.organization_id,
+    sourceTreasury.account_id,
+    "organization_transfer_out",
+    amount,
+    `${source.name} -> ${target.name}`
+  );
+  appendPortalAudit(
+    store,
+    actorName,
+    tenantId,
+    "organization",
+    target.organization_id,
+    targetTreasury.account_id,
+    "organization_transfer_in",
+    amount,
+    `${source.name} -> ${target.name}`
+  );
+}
+
 function resolveOrganizationTenantId(store, actorUser, payload) {
   if (actorUser.tenant_id !== "platform-root") {
     return actorUser.tenant_id;
@@ -1688,6 +1818,26 @@ async function adminAction(store, payload) {
     case "reactivate_organization":
       requirePermission(user, "reactivate_organization");
       updateOrganizationStatus(store, resolveOrganizationTenantId(store, user, payload), actorName, payload.organization_id, "ACTIVE");
+      break;
+    case "fund_organization":
+      requirePermission(user, "fund_organization");
+      updateOrganizationTreasury(store, resolveOrganizationTenantId(store, user, payload), actorName, payload.organization_id, payload.amount, "fund", payload);
+      break;
+    case "spend_organization":
+      requirePermission(user, "spend_organization");
+      updateOrganizationTreasury(store, resolveOrganizationTenantId(store, user, payload), actorName, payload.organization_id, payload.amount, "spend", payload);
+      break;
+    case "transfer_organization":
+      requirePermission(user, "transfer_organization");
+      transferOrganizationTreasury(
+        store,
+        resolveOrganizationTenantId(store, user, payload),
+        actorName,
+        payload.organization_id,
+        payload.target_organization_id,
+        payload.amount,
+        payload
+      );
       break;
     case "withdraw_account":
       requirePermission(user, "withdraw_account");
