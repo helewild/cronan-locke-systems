@@ -1,7 +1,7 @@
 string CONFIG_PLATFORM_NAME = "Cronan & Locke Systems";
 string CONFIG_BANK_NAME = "";
 string CONFIG_API_URL = "http://15.204.56.251/api/v1/portal";
-string CONFIG_SETUP_SECRET = "QbN2GpbUD2mO4M-bIZKAX_rE3cng549x";
+string CONFIG_BOOTSTRAP_SECRET = "QbN2GpbUD2mO4M-bIZKAX_rE3cng549x";
 string CONFIG_DEFAULT_REGION_NAME = "";
 integer CONFIG_PAYROLL_DEFAULT = 250;
 
@@ -11,6 +11,7 @@ string gRegisteredTenantId = "";
 string gRegisteredActivationCode = "";
 string gRegisteredLicenseId = "";
 string gRegisteredAdminUrl = "";
+string gRegisteredTenantObjectSecret = "";
 
 integer loadCachedRegistration()
 {
@@ -22,7 +23,7 @@ integer loadCachedRegistration()
     }
 
     list parts = llParseStringKeepNulls(desc, ["|"], []);
-    if (llGetListLength(parts) < 5)
+    if (llGetListLength(parts) < 6)
     {
         return FALSE;
     }
@@ -31,6 +32,7 @@ integer loadCachedRegistration()
     gRegisteredActivationCode = llList2String(parts, 2);
     gRegisteredLicenseId = llList2String(parts, 3);
     gRegisteredAdminUrl = llList2String(parts, 4);
+    gRegisteredTenantObjectSecret = llList2String(parts, 5);
     return (gRegisteredTenantId != "");
 }
 
@@ -41,7 +43,8 @@ integer saveCachedRegistration()
         + gRegisteredTenantId + "|"
         + gRegisteredActivationCode + "|"
         + gRegisteredLicenseId + "|"
-        + gRegisteredAdminUrl
+        + gRegisteredAdminUrl + "|"
+        + gRegisteredTenantObjectSecret
     );
     return 0;
 }
@@ -79,7 +82,7 @@ string jsonPayload(key avatar)
 
     return llList2Json(JSON_OBJECT, [
         "action", "register_tenant_box",
-        "setup_secret", CONFIG_SETUP_SECRET,
+        "setup_secret", CONFIG_BOOTSTRAP_SECRET,
         "tenant_name", buyer,
         "bank_name", bankName,
         "primary_region_name", regionName,
@@ -204,6 +207,7 @@ default
         activationCode = llJsonGetValue(body, ["activation_code"]);
         licenseId = llJsonGetValue(body, ["license_id"]);
         adminUrl = llJsonGetValue(body, ["admin_url"]);
+        gRegisteredTenantObjectSecret = llJsonGetValue(body, ["tenant_object_secret"]);
         message = llJsonGetValue(body, ["message"]);
         gRegisteredTenantId = tenantId;
         gRegisteredActivationCode = activationCode;

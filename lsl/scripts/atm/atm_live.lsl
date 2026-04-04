@@ -9,7 +9,7 @@ integer DIALOG_CHANNEL_BASE = -910000;
 integer TEXTBOX_CHANNEL_BASE = -920000;
 
 string CONFIG_API_URL = "http://15.204.56.251/api/v1/portal";
-string CONFIG_OBJECT_SECRET = "QbN2GpbUD2mO4M-bIZKAX_rE3cng549x";
+string CONFIG_BOOTSTRAP_SECRET = "QbN2GpbUD2mO4M-bIZKAX_rE3cng549x";
 string CONFIG_TENANT_ID = "";
 string CONFIG_REGION_ID = "";
 string CONFIG_BRANCH_ID = "";
@@ -33,6 +33,7 @@ float gBalance = 0.0;
 string gResolvedTenantId = "";
 string gResolvedRegionId = "";
 string gResolvedBranchId = "";
+string gResolvedObjectSecret = "";
 
 integer loadCachedConfig()
 {
@@ -44,7 +45,7 @@ integer loadCachedConfig()
     }
 
     list parts = llParseStringKeepNulls(desc, ["|"], []);
-    if (llGetListLength(parts) < 5)
+    if (llGetListLength(parts) < 6)
     {
         return FALSE;
     }
@@ -53,6 +54,7 @@ integer loadCachedConfig()
     gBankName = llList2String(parts, 2);
     gResolvedRegionId = llList2String(parts, 3);
     gResolvedBranchId = llList2String(parts, 4);
+    gResolvedObjectSecret = llList2String(parts, 5);
     return TRUE;
 }
 
@@ -63,9 +65,19 @@ integer saveCachedConfig()
         + gResolvedTenantId + "|"
         + gBankName + "|"
         + gResolvedRegionId + "|"
-        + gResolvedBranchId
+        + gResolvedBranchId + "|"
+        + gResolvedObjectSecret
     );
     return 0;
+}
+
+string activeObjectSecret()
+{
+    if (gResolvedObjectSecret != "")
+    {
+        return gResolvedObjectSecret;
+    }
+    return CONFIG_BOOTSTRAP_SECRET;
 }
 
 string activeTenantId()
@@ -214,7 +226,7 @@ string buildRequestBody(string actionType, integer amount, integer statementCoun
             "action", "object_action",
             "object_type", "atm",
             "action_type", actionType,
-            "object_secret", CONFIG_OBJECT_SECRET,
+            "object_secret", activeObjectSecret(),
             "tenant_id", activeTenantId(),
             "region_id", activeRegionId(),
             "branch_id", activeBranchId(),
@@ -336,6 +348,7 @@ integer updateCache(string body)
     string customerName = llJsonGetValue(body, ["account", "customer_name"]);
     string balance = llJsonGetValue(body, ["account", "balance"]);
     string cardState = llJsonGetValue(body, ["card", "state"]);
+    string tenantObjectSecret = llJsonGetValue(body, ["tenant_object_secret"]);
 
     if (tenantBank != JSON_INVALID)
     {
@@ -356,6 +369,10 @@ integer updateCache(string body)
     if (branchId != JSON_INVALID && branchId != "")
     {
         gResolvedBranchId = branchId;
+    }
+    if (tenantObjectSecret != JSON_INVALID && tenantObjectSecret != "")
+    {
+        gResolvedObjectSecret = tenantObjectSecret;
     }
     if (accountId != JSON_INVALID)
     {
@@ -538,7 +555,7 @@ default
         {
             llSetObjectName(gBankName + " ATM");
         }
-        llOwnerSay("ATM live script ready. Touch to open a live banking session. Tenant and bank details are detected automatically.");
+        llOwnerSay("ATM live script ready. Touch to open a live banking session. Tenant, branding, and the tenant object secret are detected automatically.");
     }
 
     touch_start(integer count)

@@ -507,6 +507,23 @@ function findLicenseByTenant(store, tenantId) {
   return (store.licenses || []).find((item) => item.tenant_id === tenantId) || null;
 }
 
+function issueTenantObjectSecret() {
+  return "obj_" + createToken();
+}
+
+function getOrIssueLicenseObjectSecret(store, tenantId) {
+  const license = findLicenseByTenant(store, tenantId);
+  if (!license) {
+    throw new Error("License not found for tenant.");
+  }
+
+  if (!String(license.object_api_secret || "").trim()) {
+    license.object_api_secret = issueTenantObjectSecret();
+  }
+
+  return String(license.object_api_secret || "").trim();
+}
+
 function findTenantIdsByOwnerIdentity(store, ownerName, ownerKey) {
   const ownerNameKey = normalizeNameKey(ownerName);
   const ownerKeyValue = String(ownerKey || "").trim();
@@ -606,11 +623,13 @@ function withLicenseMeta(license) {
 
 function buildRegistrationResponse(store, tenantId, licenseId) {
   const tenant = findTenant(store, tenantId);
+  const tenantObjectSecret = getOrIssueLicenseObjectSecret(store, tenantId);
   return {
     ok: true,
     tenant_id: tenantId,
     activation_code: tenant?.activation_code || "",
     license_id: licenseId || "",
+    tenant_object_secret: tenantObjectSecret,
     admin_url: config.adminBaseUrl || "",
     message: "Tenant registered from setup box."
   };
@@ -629,15 +648,30 @@ function getRecentTransactionsForAccount(store, accountId, countInput = 5) {
     .map((item) => ({ ...item }));
 }
 
-function requireObjectSecret(payload) {
-  const expected = String(config.objectApiSecret || "").trim();
-  if (!expected) {
-    return;
+function validateObjectSecretForTenant(store, payload, tenantId) {
+  const provided = String(payload.object_secret || "").trim();
+  const bootstrapSecret = String(config.objectApiSecret || "").trim();
+  const tenantObjectSecret = getOrIssueLicenseObjectSecret(store, tenantId);
+
+  if (!provided) {
+    throw new Error("Missing object bridge secret.");
   }
 
-  if (String(payload.object_secret || "").trim() !== expected) {
-    throw new Error("Invalid object bridge secret.");
+  if (provided === tenantObjectSecret) {
+    return {
+      mode: "tenant",
+      tenantObjectSecret
+    };
   }
+
+  if (bootstrapSecret && provided === bootstrapSecret) {
+    return {
+      mode: "bootstrap",
+      tenantObjectSecret
+    };
+  }
+
+  throw new Error("Invalid object bridge secret.");
 }
 
 function resolveObjectAccountContext(store, payload, avatarName, objectLabel) {
@@ -1134,6 +1168,8 @@ function buildObjectAtmResponse(store, payload, account, extra = {}) {
       state: card.state
     } : null,
     transactions: getRecentTransactionsForAccount(store, account.account_id, payload.statement_count || 5),
+    tenant_object_secret: extra.tenantObjectSecret || "",
+    object_secret_mode: extra.objectSecretMode || "",
     message: extra.message || "",
     receipt: extra.receipt || null
   };
@@ -1162,6 +1198,8 @@ function buildObjectCardResponse(store, payload, account, card, extra = {}) {
       status: account.status,
       risk_flag: Boolean(account.risk_flag)
     },
+    tenant_object_secret: extra.tenantObjectSecret || "",
+    object_secret_mode: extra.objectSecretMode || "",
     message: extra.message || ""
   };
 }
@@ -1179,11 +1217,11 @@ function ensureObjectAtmAccountReady(account, card) {
 }
 
 function objectCardAction(store, payload) {
-  requireObjectSecret(payload);
   const avatarName = String(payload.avatar_name || "").trim();
   const actionType = String(payload.action_type || "session").trim().toLowerCase();
   const actorName = `CARD ${String(payload.card_id || "bound-card").trim() || "bound-card"} / ${avatarName || "Unknown Resident"}`;
   const { tenantId, account } = resolveObjectAccountContext(store, payload, avatarName, "Card");
+  const secretInfo = validateObjectSecretForTenant(store, payload, tenantId);
 
   const card = findPrimaryCardForAccount(store, account.account_id);
   if (!card) {
@@ -1192,6 +1230,8 @@ function objectCardAction(store, payload) {
 
   if (actionType === "session" || actionType === "status") {
     return buildObjectCardResponse(store, payload, account, card, {
+      tenantObjectSecret: secretInfo.tenantObjectSecret,
+      objectSecretMode: secretInfo.mode,
       message: `Card session ready for ${account.customer_name}.`
     });
   }
@@ -1199,18 +1239,24 @@ function objectCardAction(store, payload) {
   if (actionType === "lock") {
     updateCardState(store, tenantId, actorName, card.card_id, "LOCKED", "card_lock", "Card locked from in-world card object", account.account_id);
     return buildObjectCardResponse(store, payload, account, card, {
+      tenantObjectSecret: secretInfo.tenantObjectSecret,
+      objectSecretMode: secretInfo.mode,
       message: "Card locked."
     });
   }
   if (actionType === "unlock") {
     updateCardState(store, tenantId, actorName, card.card_id, "ACTIVE", "card_unlock", "Card unlocked from in-world card object", account.account_id);
     return buildObjectCardResponse(store, payload, account, card, {
+      tenantObjectSecret: secretInfo.tenantObjectSecret,
+      objectSecretMode: secretInfo.mode,
       message: "Card unlocked."
     });
   }
   if (actionType === "report_stolen") {
     updateCardState(store, tenantId, actorName, card.card_id, "STOLEN", "card_report_stolen", "Card reported stolen from in-world card object", account.account_id);
     return buildObjectCardResponse(store, payload, account, card, {
+      tenantObjectSecret: secretInfo.tenantObjectSecret,
+      objectSecretMode: secretInfo.mode,
       message: "Card reported stolen."
     });
   }
@@ -1219,16 +1265,18 @@ function objectCardAction(store, payload) {
 }
 
 function objectAtmAction(store, payload) {
-  requireObjectSecret(payload);
   const avatarName = String(payload.avatar_name || "").trim();
   const actionType = String(payload.action_type || "session").trim().toLowerCase();
   const atmId = String(payload.atm_id || "atm-terminal").trim() || "atm-terminal";
   const actorName = `ATM ${atmId} / ${avatarName || "Unknown Resident"}`;
   const { tenantId, account } = resolveObjectAccountContext(store, payload, avatarName, "ATM");
+  const secretInfo = validateObjectSecretForTenant(store, payload, tenantId);
   const card = findPrimaryCardForAccount(store, account.account_id);
 
   if (actionType === "session" || actionType === "balance" || actionType === "statement") {
     return buildObjectAtmResponse(store, payload, account, {
+      tenantObjectSecret: secretInfo.tenantObjectSecret,
+      objectSecretMode: secretInfo.mode,
       message: actionType === "statement"
         ? "ATM statement prepared."
         : `ATM session ready for ${account.customer_name}.`
@@ -1269,6 +1317,8 @@ function objectAtmAction(store, payload) {
   );
 
   return buildObjectAtmResponse(store, payload, account, {
+    tenantObjectSecret: secretInfo.tenantObjectSecret,
+    objectSecretMode: secretInfo.mode,
     message: actionType === "withdraw" ? "ATM withdrawal approved." : "ATM deposit accepted.",
     receipt: {
       action: actionType.toUpperCase(),
@@ -1533,6 +1583,7 @@ function createTenant(store, actorName, payload) {
     buyer_avatar_name: String(payload.owner_avatar_name || "").trim(),
     buyer_avatar_key: String(payload.buyer_avatar_key || "").trim(),
     setup_box_key: String(payload.setup_box_key || "").trim(),
+    object_api_secret: issueTenantObjectSecret(),
     marketplace_order_id: String(payload.marketplace_order_id || "").trim(),
     issued_at: issuedAt,
     renewed_at: issuedAt,

@@ -35,7 +35,7 @@ Optional request fields:
 For live use:
 
 1. Open [atm_live.lsl](C:/Users/Alex/Documents/New%20project/lsl/scripts/atm/atm_live.lsl)
-2. The shipped script already contains the live `CONFIG_API_URL` and object secret
+2. The shipped script already contains the live `CONFIG_API_URL` and a bootstrap secret
 3. Optional defaults can stay blank:
    - `CONFIG_TENANT_ID`
    - `CONFIG_REGION_ID`
@@ -45,5 +45,7 @@ For live use:
 5. Touch the ATM as a resident whose avatar name matches a customer account
 
 The live script now detects the tenant automatically on first successful session and caches the resolved tenant and bank branding in the object description.
+
+After the first successful session, the server returns a tenant-scoped object secret and the script switches to that tenant-specific secret automatically.
 
 The object bridge uses the server-side `OBJECT_API_SECRET` if set, or falls back to `SETUP_BOX_SECRET`.
