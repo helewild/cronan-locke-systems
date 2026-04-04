@@ -563,6 +563,10 @@ function getTotalDueFines(store) {
     .reduce((total, fine) => total + Number(fine.amount || 0), 0);
 }
 
+function getFlaggedAccounts(store) {
+  return safeArray(store.accounts).filter((account) => account.risk_flag);
+}
+
 function getTotalActiveLoanBalance(store) {
   return safeArray(store.loans)
     .filter((loan) => loan.status === "ACTIVE")
@@ -663,6 +667,7 @@ function getBankCoreRows(store) {
   const activeAccounts = safeArray(store.accounts).filter((account) => account.status === "ACTIVE").length;
   const dueFineCount = safeArray(store.fines).filter((fine) => fine.status === "DUE").length;
   const activeLoanCount = safeArray(store.loans).filter((loan) => loan.status === "ACTIVE").length;
+  const flaggedAccounts = getFlaggedAccounts(store);
   const payrollBurden = safeArray(store.organizations)
     .filter((organization) => organization.status === "ACTIVE")
     .reduce((total, organization) => total + getOrganizationPayrollBurden(store, organization.organization_id), 0);
@@ -672,8 +677,8 @@ function getBankCoreRows(store) {
     [
       "Accounts",
       "Customer banking and portal access",
-      { chip: activeAccounts ? "ONLINE" : "IDLE", tone: activeAccounts ? "" : "dim" },
-      `${activeAccounts} active account(s) / ${customerPortals} portal login(s)`,
+      { chip: flaggedAccounts.length ? "WATCH" : (activeAccounts ? "ONLINE" : "IDLE"), tone: flaggedAccounts.length ? "alert" : (activeAccounts ? "" : "dim") },
+      `${activeAccounts} active account(s) / ${customerPortals} portal login(s) / ${flaggedAccounts.length} flagged`,
       `${safeArray(store.cards).length} card(s) issued and ${safeArray(store.transactions).length} transaction record(s) available`
     ],
     [
@@ -830,6 +835,7 @@ function getAlertRows(store) {
   const activeLoans = safeArray(store.loans).filter((loan) => loan.status === "ACTIVE");
   const incidents = safeArray(store.vault_incidents).filter((incident) => incident.state === "ACTIVE");
   const offlineAtms = safeArray(store.atms).filter((atm) => atm.status !== "ONLINE");
+  const flaggedAccounts = getFlaggedAccounts(store);
 
   incidents.forEach((incident) => {
     rows.push([
@@ -911,6 +917,16 @@ function getAlertRows(store) {
     ]);
   }
 
+  flaggedAccounts.forEach((account) => {
+    rows.push([
+      "WARN",
+      "Account Risk",
+      account.account_id,
+      account.status === "FROZEN" ? "FLAGGED + FROZEN" : "FLAGGED",
+      account.risk_note || `${account.customer_name} is marked for review`
+    ]);
+  });
+
   if (!rows.length) {
     rows.push([
       "OK",
@@ -973,10 +989,14 @@ function renderDetailPanel() {
   const loan = safeArray(store.loans).find((item) => item.account_id === account.account_id);
   const employment = safeArray(store.employments).find((item) => item.account_id === account.account_id && item.status === "ACTIVE");
   const recent = getTransactions(store).filter((item) => item.account_id === account.account_id).slice(0, 3);
+  const riskSummary = account.risk_flag
+    ? `<strong>FLAGGED</strong><br>${account.risk_note || "Review note missing"}`
+    : "Clear";
 
   const items = [
     ["Account", `<strong>${account.account_id}</strong><br>${account.customer_name}<br>Status: ${account.status}`],
     ["Balances", `Bank Balance: <strong>L$${account.balance}</strong><br>Cash On Hand: L$${account.cash_on_hand}<br>Outstanding Fine: L$${account.outstanding_fine}<br>Loan Balance: L$${account.loan_balance}`],
+    ["Risk", riskSummary],
     ["Card", card ? `${card.card_id}<br>State: <strong>${card.state}</strong><br>${card.card_number}` : "No linked card"],
     ["Obligations", `${fine ? `Fine: <strong>${fine.status}</strong> (${fine.reference})<br>` : "No active fine<br>"}${loan ? `Loan: <strong>${loan.status}</strong> (${loan.terms})` : "No active loan"}`],
     ["Recent Activity", recent.length ? recent.map((item) => `${item.type} L$${item.amount} ${item.direction}`).join("<br>") : "No transactions found"],
@@ -1240,19 +1260,25 @@ function renderTable(view) {
       ]));
   } else if (view === "accounts") {
     title.textContent = "Accounts";
-    columns = ["Account ID", "Customer", "Balance", "Status", "Actions"];
+    columns = ["Account ID", "Customer", "Balance", "Risk", "Status", "Actions"];
     rows = (store.accounts || [])
-      .filter((account) => matchesSearch([account.account_id, account.customer_name, String(account.balance), account.status]))
+      .filter((account) => matchesSearch([account.account_id, account.customer_name, String(account.balance), account.status, account.risk_flag ? "flagged" : "", account.risk_note || ""]))
       .map((account) => [
       account.account_id,
       account.customer_name,
       { money: account.balance },
+      account.risk_flag
+        ? { chip: "FLAGGED", tone: "alert" }
+        : { chip: "CLEAR", tone: "dim" },
       { chip: account.status, tone: account.status === "ACTIVE" ? "" : "dim" },
       {
         actions: [
           { label: "Deposit", kind: "deposit", accountId: account.account_id, permission: "deposit_account" },
           { label: "Withdraw", kind: "withdraw", accountId: account.account_id, permission: "withdraw_account" },
           { label: "Portal Access", kind: "create-customer-portal", accountId: account.account_id, permission: "create_customer_portal_user" },
+          account.risk_flag
+            ? { label: "Clear Flag", kind: "clear-flag", accountId: account.account_id, permission: "clear_account_flag" }
+            : { label: "Flag", kind: "flag-account", accountId: account.account_id, tone: "danger", permission: "flag_account" },
           account.status === "ACTIVE"
             ? { label: "Freeze", kind: "freeze", accountId: account.account_id, tone: "danger", permission: "freeze_account" }
             : { label: "Unfreeze", kind: "unfreeze", accountId: account.account_id, permission: "unfreeze_account" }
@@ -1800,6 +1826,81 @@ async function runAccountAction(kind, accountId) {
 
     applyStore(result.store);
     addLog(result.message || `${kind} applied to ${accountId}.`);
+    return;
+  }
+
+  if (kind === "flag-account") {
+    const account = safeArray(state.store?.accounts).find((item) => item.account_id === accountId);
+    const values = await openActionModal({
+      title: "Flag Account For Review",
+      submitLabel: "Flag Account",
+      copy: `Mark <strong>${account?.customer_name || accountId}</strong> for review and optionally freeze the account immediately.`,
+      wide: true,
+      fields: [
+        { name: "note", label: "Risk Note", type: "textarea", required: true, value: "" },
+        {
+          name: "freeze_on_flag",
+          label: "Freeze Account Now?",
+          type: "select",
+          required: true,
+          value: "yes",
+          options: [{ value: "yes", label: "Yes" }, { value: "no", label: "No" }]
+        }
+      ]
+    });
+    if (!values) {
+      addLog("Account flag action canceled.");
+      return;
+    }
+
+    const result = await runAdminAction("flag_account", {
+      account_id: accountId,
+      note: String(values.note || "").trim(),
+      freeze_on_flag: String(values.freeze_on_flag || "yes") === "yes"
+    });
+    if (!result.ok) {
+      addLog(result.error || "Account flag failed.");
+      return;
+    }
+
+    applyStore(result.store);
+    addLog(result.message || `${accountId} flagged for review.`);
+    return;
+  }
+
+  if (kind === "clear-flag") {
+    const account = safeArray(state.store?.accounts).find((item) => item.account_id === accountId);
+    const values = await openActionModal({
+      title: "Clear Account Flag",
+      submitLabel: "Clear Flag",
+      copy: `Clear the current risk flag for <strong>${account?.customer_name || accountId}</strong>.`,
+      fields: [
+        {
+          name: "restore_active",
+          label: "Restore Status To ACTIVE If Frozen?",
+          type: "select",
+          required: true,
+          value: "no",
+          options: [{ value: "no", label: "No" }, { value: "yes", label: "Yes" }]
+        }
+      ]
+    });
+    if (!values) {
+      addLog("Account flag clear canceled.");
+      return;
+    }
+
+    const result = await runAdminAction("clear_account_flag", {
+      account_id: accountId,
+      restore_active: String(values.restore_active || "no") === "yes"
+    });
+    if (!result.ok) {
+      addLog(result.error || "Account flag clear failed.");
+      return;
+    }
+
+    applyStore(result.store);
+    addLog(result.message || `${accountId} risk flag cleared.`);
   }
 }
 
@@ -2769,7 +2870,7 @@ function wireAdminActions() {
       return;
     }
     const kind = button.dataset.rowAction;
-    if (["create-account", "create-customer-portal", "deposit", "withdraw", "freeze", "unfreeze"].includes(kind)) {
+    if (["create-account", "create-customer-portal", "deposit", "withdraw", "freeze", "unfreeze", "flag-account", "clear-flag"].includes(kind)) {
       await runAccountAction(kind, button.dataset.accountId);
       return;
     }

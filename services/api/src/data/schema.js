@@ -134,14 +134,19 @@ export const STORE_TABLES = [
       "cash_on_hand",
       "outstanding_fine",
       "loan_balance",
-      "status"
+      "status",
+      "risk_flag",
+      "risk_note"
     ],
     numberColumns: ["balance", "cash_on_hand", "outstanding_fine", "loan_balance"],
+    booleanColumns: ["risk_flag"],
     defaults: {
       balance: 0,
       cash_on_hand: 0,
       outstanding_fine: 0,
-      loan_balance: 0
+      loan_balance: 0,
+      risk_flag: false,
+      risk_note: ""
     }
   },
   {
@@ -338,7 +343,9 @@ export const CREATE_TABLE_STATEMENTS = [
     cash_on_hand NUMERIC(18,2) NOT NULL DEFAULT 0,
     outstanding_fine NUMERIC(18,2) NOT NULL DEFAULT 0,
     loan_balance NUMERIC(18,2) NOT NULL DEFAULT 0,
-    status TEXT NOT NULL
+    status TEXT NOT NULL,
+    risk_flag BOOLEAN NOT NULL DEFAULT FALSE,
+    risk_note TEXT
   )`,
   `CREATE TABLE IF NOT EXISTS employments (
     employment_id TEXT PRIMARY KEY,
@@ -429,6 +436,8 @@ export const CREATE_TABLE_STATEMENTS = [
   `ALTER TABLE organizations ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ`,
   `ALTER TABLE organizations ADD COLUMN IF NOT EXISTS notes TEXT`,
   `ALTER TABLE employments ADD COLUMN IF NOT EXISTS organization_id TEXT`,
+  `ALTER TABLE accounts ADD COLUMN IF NOT EXISTS risk_flag BOOLEAN NOT NULL DEFAULT FALSE`,
+  `ALTER TABLE accounts ADD COLUMN IF NOT EXISTS risk_note TEXT`,
   `ALTER TABLE licenses ADD COLUMN IF NOT EXISTS setup_box_key TEXT`,
   `ALTER TABLE licenses ADD COLUMN IF NOT EXISTS renewed_at TIMESTAMPTZ`,
   `ALTER TABLE licenses ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ`

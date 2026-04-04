@@ -78,6 +78,8 @@ const ROLE_PERMISSIONS = {
     "create_customer_portal_user",
     "deposit_account",
     "withdraw_account",
+    "flag_account",
+    "clear_account_flag",
     "freeze_account",
     "unfreeze_account",
     "lock_card",
@@ -127,6 +129,8 @@ const ROLE_PERMISSIONS = {
     "create_customer_portal_user",
     "deposit_account",
     "withdraw_account",
+    "flag_account",
+    "clear_account_flag",
     "freeze_account",
     "unfreeze_account",
     "lock_card",
@@ -167,6 +171,8 @@ const ROLE_PERMISSIONS = {
     "terminate_employment",
     "deposit_account",
     "withdraw_account",
+    "flag_account",
+    "clear_account_flag",
     "freeze_account",
     "unfreeze_account",
     "lock_card",
@@ -756,6 +762,57 @@ function updateAccountStatus(store, tenantId, actorName, accountId, status) {
     status === "ACTIVE" ? "account_unfreeze" : "account_freeze",
     0,
     "Status changed to " + status
+  );
+}
+
+function updateAccountRiskFlag(store, tenantId, actorName, accountId, nextFlagState, payload = {}) {
+  const account = findAccount(store, tenantId, accountId);
+  if (!account) {
+    throw new Error("Account not found.");
+  }
+
+  const note = String(payload.note || "").trim();
+  const freezeOnFlag = Boolean(payload.freeze_on_flag);
+  const restoreActive = Boolean(payload.restore_active);
+
+  if (nextFlagState) {
+    if (!note) {
+      throw new Error("Risk note is required when flagging an account.");
+    }
+    account.risk_flag = true;
+    account.risk_note = note;
+    if (freezeOnFlag) {
+      account.status = "FROZEN";
+    }
+    appendPortalAudit(
+      store,
+      actorName,
+      tenantId,
+      "account",
+      account.account_id,
+      account.account_id,
+      "account_flag",
+      0,
+      freezeOnFlag ? `Account flagged and frozen: ${note}` : `Account flagged: ${note}`
+    );
+    return;
+  }
+
+  account.risk_flag = false;
+  account.risk_note = "";
+  if (restoreActive && String(account.status || "").toUpperCase() === "FROZEN") {
+    account.status = "ACTIVE";
+  }
+  appendPortalAudit(
+    store,
+    actorName,
+    tenantId,
+    "account",
+    account.account_id,
+    account.account_id,
+    "account_flag_clear",
+    0,
+    restoreActive ? "Account risk flag cleared and status restored to ACTIVE" : "Account risk flag cleared"
   );
 }
 
@@ -2227,6 +2284,14 @@ async function adminAction(store, payload) {
     case "withdraw_account":
       requirePermission(user, "withdraw_account");
       updateAccountBalance(store, user.tenant_id, actorName, payload.account_id, Number(payload.amount || 0), "WITHDRAW");
+      break;
+    case "flag_account":
+      requirePermission(user, "flag_account");
+      updateAccountRiskFlag(store, user.tenant_id, actorName, payload.account_id, true, payload);
+      break;
+    case "clear_account_flag":
+      requirePermission(user, "clear_account_flag");
+      updateAccountRiskFlag(store, user.tenant_id, actorName, payload.account_id, false, payload);
       break;
     case "freeze_account":
       requirePermission(user, "freeze_account");
