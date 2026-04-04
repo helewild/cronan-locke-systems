@@ -10,6 +10,7 @@ key gRequestUser = NULL_KEY;
 string gRegisteredTenantId = "";
 string gRegisteredActivationCode = "";
 string gRegisteredLicenseId = "";
+string gRegisteredProductLicenseKey = "";
 string gRegisteredAdminUrl = "";
 string gRegisteredTenantObjectSecret = "";
 
@@ -23,7 +24,7 @@ integer loadCachedRegistration()
     }
 
     list parts = llParseStringKeepNulls(desc, ["|"], []);
-    if (llGetListLength(parts) < 6)
+    if (llGetListLength(parts) < 7)
     {
         return FALSE;
     }
@@ -31,8 +32,9 @@ integer loadCachedRegistration()
     gRegisteredTenantId = llList2String(parts, 1);
     gRegisteredActivationCode = llList2String(parts, 2);
     gRegisteredLicenseId = llList2String(parts, 3);
-    gRegisteredAdminUrl = llList2String(parts, 4);
-    gRegisteredTenantObjectSecret = llList2String(parts, 5);
+    gRegisteredProductLicenseKey = llList2String(parts, 4);
+    gRegisteredAdminUrl = llList2String(parts, 5);
+    gRegisteredTenantObjectSecret = llList2String(parts, 6);
     return (gRegisteredTenantId != "");
 }
 
@@ -43,6 +45,7 @@ integer saveCachedRegistration()
         + gRegisteredTenantId + "|"
         + gRegisteredActivationCode + "|"
         + gRegisteredLicenseId + "|"
+        + gRegisteredProductLicenseKey + "|"
         + gRegisteredAdminUrl + "|"
         + gRegisteredTenantObjectSecret
     );
@@ -106,6 +109,7 @@ integer beginRegistration(key avatar)
             + "Tenant ID: " + gRegisteredTenantId + "\n"
             + "Activation Code: " + gRegisteredActivationCode + "\n"
             + "License ID: " + gRegisteredLicenseId + "\n"
+            + "Product License Key: " + gRegisteredProductLicenseKey + "\n"
             + "Admin URL: " + gRegisteredAdminUrl
         );
         return 0;
@@ -171,6 +175,7 @@ default
         string tenantId;
         string activationCode;
         string licenseId;
+        string productLicenseKey;
         string adminUrl;
 
         if (request_id != gPendingRequest)
@@ -206,12 +211,14 @@ default
         tenantId = llJsonGetValue(body, ["tenant_id"]);
         activationCode = llJsonGetValue(body, ["activation_code"]);
         licenseId = llJsonGetValue(body, ["license_id"]);
+        productLicenseKey = llJsonGetValue(body, ["product_license_key"]);
         adminUrl = llJsonGetValue(body, ["admin_url"]);
         gRegisteredTenantObjectSecret = llJsonGetValue(body, ["tenant_object_secret"]);
         message = llJsonGetValue(body, ["message"]);
         gRegisteredTenantId = tenantId;
         gRegisteredActivationCode = activationCode;
         gRegisteredLicenseId = licenseId;
+        gRegisteredProductLicenseKey = productLicenseKey;
         gRegisteredAdminUrl = adminUrl;
         saveCachedRegistration();
 
@@ -223,6 +230,7 @@ default
             + "Tenant ID: " + tenantId + "\n"
             + "Activation Code: " + activationCode + "\n"
             + "License ID: " + licenseId + "\n"
+            + "Product License Key: " + productLicenseKey + "\n"
             + "Admin URL: " + adminUrl + "\n"
             + "Next Step: Open the admin site and use First-Time Setup."
         );

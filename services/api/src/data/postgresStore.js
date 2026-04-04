@@ -85,6 +85,7 @@ function prepareValue(column, value, definition) {
     column === "created_at"
     || column === "session_expires_at"
     || column === "issued_at"
+    || column === "product_key_issued_at"
     || column === "renewed_at"
     || column === "expires_at"
     || column === "hired_at"

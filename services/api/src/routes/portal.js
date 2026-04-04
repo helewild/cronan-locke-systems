@@ -507,8 +507,25 @@ function findLicenseByTenant(store, tenantId) {
   return (store.licenses || []).find((item) => item.tenant_id === tenantId) || null;
 }
 
+function issueProductLicenseKey() {
+  return "CLK-" + createToken().slice(0, 20).toUpperCase();
+}
+
 function issueTenantObjectSecret() {
   return "obj_" + createToken();
+}
+
+function getOrIssueProductLicenseKeyForLicense(license) {
+  if (!license) {
+    throw new Error("License not found.");
+  }
+
+  if (!String(license.product_license_key || "").trim()) {
+    license.product_license_key = issueProductLicenseKey();
+    license.product_key_issued_at = new Date().toISOString();
+  }
+
+  return String(license.product_license_key || "").trim();
 }
 
 function getOrIssueLicenseObjectSecret(store, tenantId) {
@@ -623,12 +640,15 @@ function withLicenseMeta(license) {
 
 function buildRegistrationResponse(store, tenantId, licenseId) {
   const tenant = findTenant(store, tenantId);
+  const license = findLicenseByTenant(store, tenantId);
+  const productLicenseKey = getOrIssueProductLicenseKeyForLicense(license);
   const tenantObjectSecret = getOrIssueLicenseObjectSecret(store, tenantId);
   return {
     ok: true,
     tenant_id: tenantId,
     activation_code: tenant?.activation_code || "",
     license_id: licenseId || "",
+    product_license_key: productLicenseKey,
     tenant_object_secret: tenantObjectSecret,
     admin_url: config.adminBaseUrl || "",
     message: "Tenant registered from setup box."
@@ -1583,6 +1603,8 @@ function createTenant(store, actorName, payload) {
     buyer_avatar_name: String(payload.owner_avatar_name || "").trim(),
     buyer_avatar_key: String(payload.buyer_avatar_key || "").trim(),
     setup_box_key: String(payload.setup_box_key || "").trim(),
+    product_license_key: issueProductLicenseKey(),
+    product_key_issued_at: issuedAt,
     object_api_secret: issueTenantObjectSecret(),
     marketplace_order_id: String(payload.marketplace_order_id || "").trim(),
     issued_at: issuedAt,
