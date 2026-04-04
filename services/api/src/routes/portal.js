@@ -431,6 +431,27 @@ function findAccountByAvatarName(store, tenantId, avatarName) {
   ) || null;
 }
 
+function findAccountsByAvatarNameAcrossTenants(store, avatarName) {
+  const lookup = normalizeNameKey(avatarName);
+  if (!lookup) {
+    return [];
+  }
+
+  const matchingPlayerIds = new Set(
+    (store.players || [])
+      .filter((player) => normalizeNameKey(player.avatar_name) === lookup)
+      .map((player) => player.player_id)
+  );
+
+  return (store.accounts || []).filter((account) => {
+    if (matchingPlayerIds.size && matchingPlayerIds.has(account.player_id)) {
+      return true;
+    }
+
+    return Boolean(account.player_id) && normalizeNameKey(account.customer_name) === lookup;
+  });
+}
+
 function findIncident(store, tenantId, incidentId) {
   return (store.vault_incidents || []).find((incident) => incident.tenant_id === tenantId && incident.incident_id === incidentId) || null;
 }
@@ -484,6 +505,39 @@ function findLicenseBySetupBox(store, setupBoxKey) {
 
 function findLicenseByTenant(store, tenantId) {
   return (store.licenses || []).find((item) => item.tenant_id === tenantId) || null;
+}
+
+function findTenantIdsByOwnerIdentity(store, ownerName, ownerKey) {
+  const ownerNameKey = normalizeNameKey(ownerName);
+  const ownerKeyValue = String(ownerKey || "").trim();
+  const tenantIds = new Set();
+
+  (store.tenants || []).forEach((tenant) => {
+    if (ownerNameKey && normalizeNameKey(tenant.owner_avatar_name) === ownerNameKey) {
+      tenantIds.add(tenant.tenant_id);
+    }
+  });
+
+  (store.users || []).forEach((user) => {
+    if (
+      String(user.role || "").trim() === "tenant_owner"
+      && ownerNameKey
+      && normalizeNameKey(user.avatar_name) === ownerNameKey
+    ) {
+      tenantIds.add(user.tenant_id);
+    }
+  });
+
+  (store.licenses || []).forEach((license) => {
+    if (
+      (ownerKeyValue && String(license.buyer_avatar_key || "").trim() === ownerKeyValue)
+      || (ownerNameKey && normalizeNameKey(license.buyer_avatar_name) === ownerNameKey)
+    ) {
+      tenantIds.add(license.tenant_id);
+    }
+  });
+
+  return [...tenantIds];
 }
 
 function dateIsPast(value) {
@@ -584,6 +638,74 @@ function requireObjectSecret(payload) {
   if (String(payload.object_secret || "").trim() !== expected) {
     throw new Error("Invalid object bridge secret.");
   }
+}
+
+function resolveObjectAccountContext(store, payload, avatarName, objectLabel) {
+  const explicitTenantId = String(payload.tenant_id || "").trim();
+  const objectOwnerName = String(payload.object_owner_name || "").trim();
+  const objectOwnerKey = String(payload.object_owner_key || "").trim();
+  const resolvedLabel = objectLabel || "Object";
+
+  if (!avatarName) {
+    throw new Error(`${resolvedLabel} request is missing avatar_name.`);
+  }
+
+  if (explicitTenantId) {
+    enforceTenantAccess(store, explicitTenantId);
+    const explicitAccount = findAccountByAvatarName(store, explicitTenantId, avatarName);
+    if (!explicitAccount) {
+      throw new Error("No active bank account is linked to this resident.");
+    }
+    return {
+      tenantId: explicitTenantId,
+      account: explicitAccount
+    };
+  }
+
+  const allAccounts = findAccountsByAvatarNameAcrossTenants(store, avatarName).filter((account) => {
+    try {
+      enforceTenantAccess(store, account.tenant_id);
+      return true;
+    } catch {
+      return false;
+    }
+  });
+
+  if (allAccounts.length === 1) {
+    return {
+      tenantId: allAccounts[0].tenant_id,
+      account: allAccounts[0]
+    };
+  }
+
+  const ownerTenantIds = findTenantIdsByOwnerIdentity(store, objectOwnerName, objectOwnerKey);
+  if (ownerTenantIds.length) {
+    const ownerScopedAccount = allAccounts.find((account) => ownerTenantIds.includes(account.tenant_id));
+    if (ownerScopedAccount) {
+      return {
+        tenantId: ownerScopedAccount.tenant_id,
+        account: ownerScopedAccount
+      };
+    }
+
+    if (ownerTenantIds.length === 1) {
+      const ownerTenantId = ownerTenantIds[0];
+      enforceTenantAccess(store, ownerTenantId);
+      const fallbackAccount = findAccountByAvatarName(store, ownerTenantId, avatarName);
+      if (fallbackAccount) {
+        return {
+          tenantId: ownerTenantId,
+          account: fallbackAccount
+        };
+      }
+    }
+  }
+
+  if (allAccounts.length > 1) {
+    throw new Error("Multiple tenant accounts match this resident. Bind this object to a tenant before use.");
+  }
+
+  throw new Error("No active bank account is linked to this resident.");
 }
 
 function nextId(prefix, values) {
@@ -1058,23 +1180,10 @@ function ensureObjectAtmAccountReady(account, card) {
 
 function objectCardAction(store, payload) {
   requireObjectSecret(payload);
-  const tenantId = String(payload.tenant_id || "").trim();
   const avatarName = String(payload.avatar_name || "").trim();
   const actionType = String(payload.action_type || "session").trim().toLowerCase();
   const actorName = `CARD ${String(payload.card_id || "bound-card").trim() || "bound-card"} / ${avatarName || "Unknown Resident"}`;
-
-  if (!tenantId) {
-    throw new Error("Card request is missing tenant_id.");
-  }
-  if (!avatarName) {
-    throw new Error("Card request is missing avatar_name.");
-  }
-
-  enforceTenantAccess(store, tenantId);
-  const account = findAccountByAvatarName(store, tenantId, avatarName);
-  if (!account) {
-    throw new Error("No bank account is linked to this resident.");
-  }
+  const { tenantId, account } = resolveObjectAccountContext(store, payload, avatarName, "Card");
 
   const card = findPrimaryCardForAccount(store, account.account_id);
   if (!card) {
@@ -1111,24 +1220,11 @@ function objectCardAction(store, payload) {
 
 function objectAtmAction(store, payload) {
   requireObjectSecret(payload);
-  const tenantId = String(payload.tenant_id || "").trim();
   const avatarName = String(payload.avatar_name || "").trim();
   const actionType = String(payload.action_type || "session").trim().toLowerCase();
   const atmId = String(payload.atm_id || "atm-terminal").trim() || "atm-terminal";
   const actorName = `ATM ${atmId} / ${avatarName || "Unknown Resident"}`;
-
-  if (!tenantId) {
-    throw new Error("ATM request is missing tenant_id.");
-  }
-  if (!avatarName) {
-    throw new Error("ATM request is missing avatar_name.");
-  }
-
-  enforceTenantAccess(store, tenantId);
-  const account = findAccountByAvatarName(store, tenantId, avatarName);
-  if (!account) {
-    throw new Error("No active bank account is linked to this resident.");
-  }
+  const { tenantId, account } = resolveObjectAccountContext(store, payload, avatarName, "ATM");
   const card = findPrimaryCardForAccount(store, account.account_id);
 
   if (actionType === "session" || actionType === "balance" || actionType === "statement") {

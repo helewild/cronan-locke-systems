@@ -9,11 +9,11 @@ integer DIALOG_CHANNEL_BASE = -910000;
 integer TEXTBOX_CHANNEL_BASE = -920000;
 
 string CONFIG_API_URL = "http://15.204.56.251/api/v1/portal";
-string CONFIG_OBJECT_SECRET = "REPLACE_ME_OBJECT_SECRET";
-string CONFIG_TENANT_ID = "demo-tenant";
-string CONFIG_REGION_ID = "demo-region";
-string CONFIG_BRANCH_ID = "main-branch";
-string CONFIG_ATM_ID = "atm-001";
+string CONFIG_OBJECT_SECRET = "QbN2GpbUD2mO4M-bIZKAX_rE3cng549x";
+string CONFIG_TENANT_ID = "";
+string CONFIG_REGION_ID = "";
+string CONFIG_BRANCH_ID = "";
+string CONFIG_ATM_ID = "";
 string CONFIG_BANK_NAME = "Cronan & Locke Systems";
 
 key gActiveUser = NULL_KEY;
@@ -30,6 +30,79 @@ string gAccountId = "";
 string gCustomerName = "";
 string gCardState = "UNKNOWN";
 float gBalance = 0.0;
+string gResolvedTenantId = "";
+string gResolvedRegionId = "";
+string gResolvedBranchId = "";
+
+integer loadCachedConfig()
+{
+    string desc = llGetObjectDesc();
+
+    if (llSubStringIndex(desc, "CLSATM|") != 0)
+    {
+        return FALSE;
+    }
+
+    list parts = llParseStringKeepNulls(desc, ["|"], []);
+    if (llGetListLength(parts) < 5)
+    {
+        return FALSE;
+    }
+
+    gResolvedTenantId = llList2String(parts, 1);
+    gBankName = llList2String(parts, 2);
+    gResolvedRegionId = llList2String(parts, 3);
+    gResolvedBranchId = llList2String(parts, 4);
+    return TRUE;
+}
+
+integer saveCachedConfig()
+{
+    llSetObjectDesc(
+        "CLSATM|"
+        + gResolvedTenantId + "|"
+        + gBankName + "|"
+        + gResolvedRegionId + "|"
+        + gResolvedBranchId
+    );
+    return 0;
+}
+
+string activeTenantId()
+{
+    if (gResolvedTenantId != "")
+    {
+        return gResolvedTenantId;
+    }
+    return CONFIG_TENANT_ID;
+}
+
+string activeRegionId()
+{
+    if (gResolvedRegionId != "")
+    {
+        return gResolvedRegionId;
+    }
+    return CONFIG_REGION_ID;
+}
+
+string activeBranchId()
+{
+    if (gResolvedBranchId != "")
+    {
+        return gResolvedBranchId;
+    }
+    return CONFIG_BRANCH_ID;
+}
+
+string activeAtmId()
+{
+    if (CONFIG_ATM_ID != "")
+    {
+        return CONFIG_ATM_ID;
+    }
+    return (string)llGetKey();
+}
 
 integer randomPrivateChannel(integer base)
 {
@@ -142,12 +215,14 @@ string buildRequestBody(string actionType, integer amount, integer statementCoun
             "object_type", "atm",
             "action_type", actionType,
             "object_secret", CONFIG_OBJECT_SECRET,
-            "tenant_id", CONFIG_TENANT_ID,
-            "region_id", CONFIG_REGION_ID,
-            "branch_id", CONFIG_BRANCH_ID,
-            "atm_id", CONFIG_ATM_ID,
+            "tenant_id", activeTenantId(),
+            "region_id", activeRegionId(),
+            "branch_id", activeBranchId(),
+            "atm_id", activeAtmId(),
             "avatar_key", (string)gActiveUser,
             "avatar_name", residentName(gActiveUser),
+            "object_owner_key", (string)llGetOwner(),
+            "object_owner_name", residentName(llGetOwner()),
             "amount", amount,
             "statement_count", statementCount
         ]
@@ -200,7 +275,7 @@ integer showMainMenu()
         + "Account: " + gAccountId + "\n"
         + "Balance: " + formatMoney(gBalance) + "\n"
         + "Card: " + gCardState + "\n"
-        + "ATM: " + CONFIG_ATM_ID + "\n\n"
+        + "ATM: " + activeAtmId() + "\n\n"
         + "Select a service:";
 
     dialog(gActiveUser, message, mainButtons(), MENU_MAIN);
@@ -267,6 +342,21 @@ integer updateCache(string body)
         gBankName = tenantBank;
         llSetObjectName(tenantBank + " ATM");
     }
+    string tenantId = llJsonGetValue(body, ["tenant", "tenant_id"]);
+    string regionId = llJsonGetValue(body, ["atm", "region_id"]);
+    string branchId = llJsonGetValue(body, ["atm", "branch_id"]);
+    if (tenantId != JSON_INVALID)
+    {
+        gResolvedTenantId = tenantId;
+    }
+    if (regionId != JSON_INVALID && regionId != "")
+    {
+        gResolvedRegionId = regionId;
+    }
+    if (branchId != JSON_INVALID && branchId != "")
+    {
+        gResolvedBranchId = branchId;
+    }
     if (accountId != JSON_INVALID)
     {
         gAccountId = accountId;
@@ -287,6 +377,7 @@ integer updateCache(string body)
     {
         gCardState = "NO CARD";
     }
+    saveCachedConfig();
     return 0;
 }
 
@@ -441,8 +532,13 @@ default
     state_entry()
     {
         gBankName = CONFIG_BANK_NAME;
+        loadCachedConfig();
         llSetObjectName(CONFIG_BANK_NAME + " ATM");
-        llOwnerSay("ATM live script ready. Replace CONFIG_OBJECT_SECRET before use, then touch to open a live banking session.");
+        if (gBankName != "")
+        {
+            llSetObjectName(gBankName + " ATM");
+        }
+        llOwnerSay("ATM live script ready. Touch to open a live banking session. Tenant and bank details are detected automatically.");
     }
 
     touch_start(integer count)

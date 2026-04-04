@@ -10,9 +10,9 @@ integer ACTION_UNLOCK = 2;
 integer ACTION_REPORT_STOLEN = 3;
 
 string CONFIG_API_URL = "http://15.204.56.251/api/v1/portal";
-string CONFIG_OBJECT_SECRET = "REPLACE_ME_OBJECT_SECRET";
-string CONFIG_TENANT_ID = "demo-tenant";
-string CONFIG_CARD_ID = "card-001";
+string CONFIG_OBJECT_SECRET = "QbN2GpbUD2mO4M-bIZKAX_rE3cng549x";
+string CONFIG_TENANT_ID = "";
+string CONFIG_CARD_ID = "";
 string CONFIG_BANK_NAME = "Cronan & Locke Systems";
 
 key gCardOwner = NULL_KEY;
@@ -26,6 +26,51 @@ string gCardNumber = "";
 string gCardState = "UNKNOWN";
 string gAccountId = "";
 float gBalance = 0.0;
+string gResolvedTenantId = "";
+
+integer loadCachedConfig()
+{
+    string desc = llGetObjectDesc();
+
+    if (llSubStringIndex(desc, "CLSCARD|") != 0)
+    {
+        return FALSE;
+    }
+
+    list parts = llParseStringKeepNulls(desc, ["|"], []);
+    if (llGetListLength(parts) < 3)
+    {
+        return FALSE;
+    }
+
+    gResolvedTenantId = llList2String(parts, 1);
+    gBankName = llList2String(parts, 2);
+    return TRUE;
+}
+
+integer saveCachedConfig()
+{
+    llSetObjectDesc("CLSCARD|" + gResolvedTenantId + "|" + gBankName);
+    return 0;
+}
+
+string activeTenantId()
+{
+    if (gResolvedTenantId != "")
+    {
+        return gResolvedTenantId;
+    }
+    return CONFIG_TENANT_ID;
+}
+
+string activeCardId()
+{
+    if (CONFIG_CARD_ID != "")
+    {
+        return CONFIG_CARD_ID;
+    }
+    return (string)llGetKey();
+}
 
 integer randomPrivateChannel(integer base)
 {
@@ -129,10 +174,12 @@ string buildRequestBody(string actionType)
             "object_type", "card",
             "action_type", actionType,
             "object_secret", CONFIG_OBJECT_SECRET,
-            "tenant_id", CONFIG_TENANT_ID,
-            "card_id", CONFIG_CARD_ID,
+            "tenant_id", activeTenantId(),
+            "card_id", activeCardId(),
             "avatar_key", (string)gCardOwner,
-            "avatar_name", ownerName()
+            "avatar_name", ownerName(),
+            "object_owner_key", (string)llGetOwner(),
+            "object_owner_name", ownerName()
         ]
     );
 }
@@ -235,6 +282,7 @@ integer updateCache(string body)
         gBankName = bankName;
         llSetObjectName(bankName + " Card");
     }
+    string tenantId = llJsonGetValue(body, ["tenant", "tenant_id"]);
     if (cardNumber != JSON_INVALID)
     {
         gCardNumber = cardNumber;
@@ -251,6 +299,11 @@ integer updateCache(string body)
     {
         gBalance = (float)balance;
     }
+    if (tenantId != JSON_INVALID)
+    {
+        gResolvedTenantId = tenantId;
+    }
+    saveCachedConfig();
     return 0;
 }
 
@@ -331,8 +384,9 @@ default
     {
         gCardOwner = llGetOwner();
         gBankName = CONFIG_BANK_NAME;
-        llSetObjectName(CONFIG_BANK_NAME + " Card");
-        llOwnerSay("Card live script ready. Replace CONFIG_OBJECT_SECRET before use, then touch to open the live card menu.");
+        loadCachedConfig();
+        llSetObjectName(gBankName + " Card");
+        llOwnerSay("Card live script ready. Touch to open the live card menu. Tenant and bank details are detected automatically.");
     }
 
     touch_start(integer count)

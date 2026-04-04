@@ -20,24 +20,30 @@ Supported ATM action types:
 Required request fields:
 
 - `object_secret`
+- `avatar_name`
+- `avatar_key`
+
+Optional request fields:
+
 - `tenant_id`
 - `region_id`
 - `branch_id`
 - `atm_id`
-- `avatar_name`
-- `avatar_key`
+- `object_owner_name`
+- `object_owner_key`
 
 For live use:
 
 1. Open [atm_live.lsl](C:/Users/Alex/Documents/New%20project/lsl/scripts/atm/atm_live.lsl)
-2. Set:
-   - `CONFIG_API_URL`
-   - `CONFIG_OBJECT_SECRET`
+2. The shipped script already contains the live `CONFIG_API_URL` and object secret
+3. Optional defaults can stay blank:
    - `CONFIG_TENANT_ID`
    - `CONFIG_REGION_ID`
    - `CONFIG_BRANCH_ID`
    - `CONFIG_ATM_ID`
-3. Drop the script into the ATM object
-4. Touch the ATM as a resident whose avatar name matches a customer account in that tenant
+4. Drop the script into the ATM object
+5. Touch the ATM as a resident whose avatar name matches a customer account
+
+The live script now detects the tenant automatically on first successful session and caches the resolved tenant and bank branding in the object description.
 
 The object bridge uses the server-side `OBJECT_API_SECRET` if set, or falls back to `SETUP_BOX_SECRET`.

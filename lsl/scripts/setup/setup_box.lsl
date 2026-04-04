@@ -1,7 +1,7 @@
 string CONFIG_PLATFORM_NAME = "Cronan & Locke Systems";
 string CONFIG_BANK_NAME = "";
 string CONFIG_API_URL = "http://15.204.56.251/api/v1/portal";
-string CONFIG_SETUP_SECRET = "REPLACE_ME_SETUP_SECRET";
+string CONFIG_SETUP_SECRET = "QbN2GpbUD2mO4M-bIZKAX_rE3cng549x";
 string CONFIG_DEFAULT_REGION_NAME = "";
 integer CONFIG_PAYROLL_DEFAULT = 250;
 
@@ -11,6 +11,40 @@ string gRegisteredTenantId = "";
 string gRegisteredActivationCode = "";
 string gRegisteredLicenseId = "";
 string gRegisteredAdminUrl = "";
+
+integer loadCachedRegistration()
+{
+    string desc = llGetObjectDesc();
+
+    if (llSubStringIndex(desc, "CLSSETUP|") != 0)
+    {
+        return FALSE;
+    }
+
+    list parts = llParseStringKeepNulls(desc, ["|"], []);
+    if (llGetListLength(parts) < 5)
+    {
+        return FALSE;
+    }
+
+    gRegisteredTenantId = llList2String(parts, 1);
+    gRegisteredActivationCode = llList2String(parts, 2);
+    gRegisteredLicenseId = llList2String(parts, 3);
+    gRegisteredAdminUrl = llList2String(parts, 4);
+    return (gRegisteredTenantId != "");
+}
+
+integer saveCachedRegistration()
+{
+    llSetObjectDesc(
+        "CLSSETUP|"
+        + gRegisteredTenantId + "|"
+        + gRegisteredActivationCode + "|"
+        + gRegisteredLicenseId + "|"
+        + gRegisteredAdminUrl
+    );
+    return 0;
+}
 
 string headerLine()
 {
@@ -110,6 +144,7 @@ default
     state_entry()
     {
         llSetObjectName(CONFIG_PLATFORM_NAME + " Setup Box");
+        loadCachedRegistration();
         llOwnerSay("Setup box ready. Touch to register a new tenant.");
     }
 
@@ -174,6 +209,7 @@ default
         gRegisteredActivationCode = activationCode;
         gRegisteredLicenseId = licenseId;
         gRegisteredAdminUrl = adminUrl;
+        saveCachedRegistration();
 
         llRegionSayTo(
             gRequestUser,

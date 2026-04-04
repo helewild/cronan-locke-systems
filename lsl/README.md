@@ -23,3 +23,4 @@ Rule:
 - Keep these scripts mock-ready and frontend-focused.
 - Move state and persistence to the backend later.
 - New live object bridge scripts should target the VPS API at `/api/v1/portal` using `action: "object_action"`.
+- Live shipped objects should prefer automatic tenant resolution and cached object metadata over buyer-edited script constants.
