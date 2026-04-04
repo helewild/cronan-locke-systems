@@ -824,6 +824,10 @@ function getPrimaryPlayerCard() {
   return safeArray(state.store?.cards)[0] || null;
 }
 
+function getPlayerTransferDirectory() {
+  return safeArray(state.store?.transfer_directory);
+}
+
 function renderPlayerPortal() {
   const store = state.store || {};
   const tenant = store.tenant || null;
@@ -834,6 +838,7 @@ function renderPlayerPortal() {
   const loans = safeArray(store.loans);
   const dueFine = fines.find((item) => item.status === "DUE") || null;
   const activeLoan = loans.find((item) => item.status === "ACTIVE") || null;
+  const transferDirectory = getPlayerTransferDirectory();
   const transactions = safeArray(store.transactions).slice(0, 8);
   const employment = safeArray(store.employments).find((item) => item.status === "ACTIVE") || null;
 
@@ -892,12 +897,14 @@ function renderPlayerPortal() {
   const reportButton = document.getElementById("player-report-card-btn");
   const fineButton = document.getElementById("player-pay-fine-btn");
   const loanButton = document.getElementById("player-pay-loan-btn");
-  if (lockButton && unlockButton && reportButton && fineButton && loanButton) {
+  const transferButton = document.getElementById("player-transfer-btn");
+  if (lockButton && unlockButton && reportButton && fineButton && loanButton && transferButton) {
     lockButton.disabled = !primaryCard || primaryCard.state !== "ACTIVE";
     unlockButton.disabled = !primaryCard || primaryCard.state !== "LOCKED";
     reportButton.disabled = !primaryCard || primaryCard.state === "STOLEN";
     fineButton.disabled = !dueFine;
     loanButton.disabled = !activeLoan;
+    transferButton.disabled = !account || !transferDirectory.length || account.status !== "ACTIVE";
   }
 
   if (!primaryCard) {
@@ -1697,6 +1704,65 @@ async function runPlayerLoanAction() {
 
   applyStore(result.store);
   setPlayerBanner("[OK] LOAN PAYMENT POSTED", "ok");
+}
+
+async function runPlayerTransferAction() {
+  const account = state.store?.account || null;
+  const transferDirectory = getPlayerTransferDirectory();
+
+  if (!account || account.status !== "ACTIVE") {
+    setPlayerBanner("[!] SOURCE ACCOUNT IS NOT ACTIVE", "alert");
+    return;
+  }
+  if (!transferDirectory.length) {
+    setPlayerBanner("[!] NO CUSTOMER RECIPIENTS AVAILABLE", "alert");
+    return;
+  }
+
+  const values = await openActionModal({
+    title: "Transfer Funds",
+    submitLabel: "Send Transfer",
+    copy: `Send funds from <strong>${account.account_id}</strong>. Available balance: <strong>L$${Number(account.balance || 0)}</strong>.`,
+    wide: true,
+    fields: [
+      {
+        name: "target_account_id",
+        label: "Recipient Account",
+        type: "select",
+        required: true,
+        value: transferDirectory[0]?.account_id || "",
+        options: transferDirectory.map((item) => ({
+          value: item.account_id,
+          label: `${item.customer_name} (${item.account_id})`
+        }))
+      },
+      { name: "amount", label: "Transfer Amount", type: "number", required: true, value: "50" },
+      { name: "memo", label: "Memo", value: "" }
+    ]
+  });
+  if (!values) {
+    return;
+  }
+
+  const amount = Number(values.amount);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    setPlayerBanner("[!] TRANSFER AMOUNT MUST BE GREATER THAN ZERO", "alert");
+    return;
+  }
+
+  const result = await runAdminAction("transfer_funds", {
+    source_account_id: account.account_id,
+    target_account_id: String(values.target_account_id || "").trim(),
+    amount,
+    memo: String(values.memo || "").trim()
+  });
+  if (!result.ok) {
+    setPlayerBanner("[!] " + String(result.error || "Transfer failed.").toUpperCase(), "alert");
+    return;
+  }
+
+  applyStore(result.store);
+  setPlayerBanner("[OK] TRANSFER POSTED", "ok");
 }
 
 async function runFineAction(fineId) {
@@ -2683,6 +2749,9 @@ function wireAdminActions() {
   });
   document.getElementById("player-pay-loan-btn").addEventListener("click", async () => {
     await runPlayerLoanAction();
+  });
+  document.getElementById("player-transfer-btn").addEventListener("click", async () => {
+    await runPlayerTransferAction();
   });
   document.getElementById("staff-role").addEventListener("change", updateStaffRoleHint);
   document.getElementById("staff-form").addEventListener("submit", submitStaffCreate);

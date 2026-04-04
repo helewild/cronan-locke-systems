@@ -198,6 +198,7 @@ const ROLE_PERMISSIONS = {
     "view_transactions",
     "view_fines",
     "view_loans",
+    "transfer_funds",
     "lock_card",
     "unlock_card",
     "report_stolen_card",
@@ -297,6 +298,18 @@ function buildCustomerStore(store, user) {
   const organizations = (store.organizations || []).filter((item) =>
     employments.some((job) => job.organization_id && job.organization_id === item.organization_id)
   );
+  const transferDirectory = (store.accounts || [])
+    .filter((item) =>
+      item.tenant_id === tenantId
+      && item.account_id !== account.account_id
+      && item.player_id
+      && isActive(item.status)
+    )
+    .map((item) => ({
+      account_id: item.account_id,
+      customer_name: item.customer_name,
+      status: item.status
+    }));
 
   return {
     scope_mode: "player",
@@ -307,7 +320,8 @@ function buildCustomerStore(store, user) {
     loans: loans.map((item) => ({ ...item })),
     transactions: transactions.map((item) => ({ ...item })),
     employments: employments.map((item) => ({ ...item })),
-    organizations: organizations.map((item) => ({ ...item }))
+    organizations: organizations.map((item) => ({ ...item })),
+    transfer_directory: transferDirectory
   };
 }
 
@@ -1418,6 +1432,76 @@ function payLoan(store, tenantId, actorName, loanId, amountInput, allowedAccount
   appendPortalAudit(store, actorName, tenantId, "loan", loan.loan_id, account.account_id, "loan_pay", amount, "Loan payment from admin terminal");
 }
 
+function transferFunds(store, tenantId, actorName, sourceAccountId, targetAccountId, amountInput, payload = {}, allowedSourceAccountId = "") {
+  const sourceAccount = findAccount(store, tenantId, sourceAccountId);
+  if (!sourceAccount) {
+    throw new Error("Source account not found.");
+  }
+  if (allowedSourceAccountId && sourceAccount.account_id !== allowedSourceAccountId) {
+    throw new Error("Transfer access denied for this portal account.");
+  }
+  if (!isActive(sourceAccount.status)) {
+    throw new Error("Source account is not active.");
+  }
+
+  const targetAccount = findAccount(store, tenantId, targetAccountId);
+  if (!targetAccount) {
+    throw new Error("Transfer recipient not found.");
+  }
+  if (sourceAccount.account_id === targetAccount.account_id) {
+    throw new Error("Choose a different recipient account.");
+  }
+  if (!isActive(targetAccount.status)) {
+    throw new Error("Recipient account is not active.");
+  }
+  if (allowedSourceAccountId && !targetAccount.player_id) {
+    throw new Error("Customer transfers must target another player account.");
+  }
+
+  const amount = Number(amountInput || 0);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new Error("Transfer amount must be greater than zero.");
+  }
+  if (Number(sourceAccount.balance || 0) < amount) {
+    throw new Error("Insufficient funds for transfer.");
+  }
+
+  const memo = String(payload.memo || "").trim();
+  const sourceMemo = memo || ("Transfer to " + targetAccount.customer_name);
+  const targetMemo = memo || ("Transfer from " + sourceAccount.customer_name);
+
+  sourceAccount.balance = Number(sourceAccount.balance || 0) - amount;
+  targetAccount.balance = Number(targetAccount.balance || 0) + amount;
+
+  createTransaction(store, {
+    account_id: sourceAccount.account_id,
+    type: "PLAYER_TRANSFER",
+    amount,
+    direction: "OUT",
+    memo: sourceMemo
+  });
+
+  createTransaction(store, {
+    account_id: targetAccount.account_id,
+    type: "PLAYER_TRANSFER",
+    amount,
+    direction: "IN",
+    memo: targetMemo
+  });
+
+  appendPortalAudit(
+    store,
+    actorName,
+    tenantId,
+    "account",
+    sourceAccount.account_id,
+    targetAccount.account_id,
+    "account_transfer",
+    amount,
+    `${sourceAccount.customer_name} -> ${targetAccount.customer_name}${memo ? " / " + memo : ""}`
+  );
+}
+
 async function changePassword(store, payload) {
   const user = requireSession(store, payload);
   if (user.tenant_id !== "platform-root") {
@@ -2079,6 +2163,19 @@ async function adminAction(store, payload) {
     case "pay_loan":
       requirePermission(user, "pay_loan");
       payLoan(store, user.tenant_id, actorName, payload.loan_id, payload.amount, user.role === "customer" ? user.linked_account_id : "");
+      break;
+    case "transfer_funds":
+      requirePermission(user, "transfer_funds");
+      transferFunds(
+        store,
+        user.tenant_id,
+        actorName,
+        payload.source_account_id || user.linked_account_id,
+        payload.target_account_id,
+        payload.amount,
+        payload,
+        user.role === "customer" ? user.linked_account_id : ""
+      );
       break;
     default:
       return { ok: false, error: "Unsupported admin action." };
