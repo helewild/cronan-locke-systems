@@ -191,6 +191,40 @@ export const STORE_TABLES = [
     }
   },
   {
+    key: "approval_requests",
+    table: "approval_requests",
+    columns: [
+      "approval_request_id",
+      "tenant_id",
+      "request_type",
+      "status",
+      "requested_by",
+      "requested_at",
+      "reviewed_by",
+      "reviewed_at",
+      "source_account_id",
+      "target_account_id",
+      "source_organization_id",
+      "target_organization_id",
+      "amount",
+      "memo",
+      "payload"
+    ],
+    jsonColumns: ["payload"],
+    numberColumns: ["amount"],
+    defaults: {
+      reviewed_by: "",
+      reviewed_at: "",
+      source_account_id: "",
+      target_account_id: "",
+      source_organization_id: "",
+      target_organization_id: "",
+      amount: 0,
+      memo: "",
+      payload: {}
+    }
+  },
+  {
     key: "fines",
     table: "fines",
     columns: ["fine_id", "account_id", "amount", "reference", "status"],
@@ -375,6 +409,23 @@ export const CREATE_TABLE_STATEMENTS = [
     direction TEXT NOT NULL,
     memo TEXT
   )`,
+  `CREATE TABLE IF NOT EXISTS approval_requests (
+    approval_request_id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    request_type TEXT NOT NULL,
+    status TEXT NOT NULL,
+    requested_by TEXT NOT NULL,
+    requested_at TIMESTAMPTZ,
+    reviewed_by TEXT,
+    reviewed_at TIMESTAMPTZ,
+    source_account_id TEXT,
+    target_account_id TEXT,
+    source_organization_id TEXT,
+    target_organization_id TEXT,
+    amount NUMERIC(18,2) NOT NULL DEFAULT 0,
+    memo TEXT,
+    payload JSONB NOT NULL DEFAULT '{}'::jsonb
+  )`,
   `CREATE TABLE IF NOT EXISTS fines (
     fine_id TEXT PRIMARY KEY,
     account_id TEXT NOT NULL,
@@ -438,6 +489,7 @@ export const CREATE_TABLE_STATEMENTS = [
   `ALTER TABLE employments ADD COLUMN IF NOT EXISTS organization_id TEXT`,
   `ALTER TABLE accounts ADD COLUMN IF NOT EXISTS risk_flag BOOLEAN NOT NULL DEFAULT FALSE`,
   `ALTER TABLE accounts ADD COLUMN IF NOT EXISTS risk_note TEXT`,
+  `ALTER TABLE approval_requests ADD COLUMN IF NOT EXISTS payload JSONB NOT NULL DEFAULT '{}'::jsonb`,
   `ALTER TABLE licenses ADD COLUMN IF NOT EXISTS setup_box_key TEXT`,
   `ALTER TABLE licenses ADD COLUMN IF NOT EXISTS renewed_at TIMESTAMPTZ`,
   `ALTER TABLE licenses ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ`

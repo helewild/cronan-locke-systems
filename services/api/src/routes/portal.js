@@ -36,6 +36,7 @@ const ROLE_PERMISSIONS = {
     "view_bank_core",
     "view_reports",
     "view_alerts",
+    "view_approvals",
     "view_accounts",
     "view_organizations",
     "view_employment",
@@ -88,6 +89,8 @@ const ROLE_PERMISSIONS = {
     "pay_fine",
     "pay_loan",
     "run_payroll",
+    "approve_request",
+    "deny_request",
     "dispatch_police",
     "lock_vault",
     "shutdown_atm_network"
@@ -96,6 +99,7 @@ const ROLE_PERMISSIONS = {
     "view_bank_core",
     "view_reports",
     "view_alerts",
+    "view_approvals",
     "view_accounts",
     "view_organizations",
     "view_employment",
@@ -139,6 +143,8 @@ const ROLE_PERMISSIONS = {
     "pay_fine",
     "pay_loan",
     "run_payroll",
+    "approve_request",
+    "deny_request",
     "dispatch_police",
     "lock_vault",
     "shutdown_atm_network"
@@ -147,6 +153,7 @@ const ROLE_PERMISSIONS = {
     "view_bank_core",
     "view_reports",
     "view_alerts",
+    "view_approvals",
     "view_accounts",
     "view_organizations",
     "view_employment",
@@ -180,7 +187,9 @@ const ROLE_PERMISSIONS = {
     "report_stolen_card",
     "pay_fine",
     "pay_loan",
-    "run_payroll"
+    "run_payroll",
+    "approve_request",
+    "deny_request"
   ],
   teller: [
     "view_accounts",
@@ -200,6 +209,7 @@ const ROLE_PERMISSIONS = {
   security_admin: [
     "view_bank_core",
     "view_alerts",
+    "view_approvals",
     "view_vault_control",
     "view_incidents",
     "view_atm_network",
@@ -222,6 +232,8 @@ const ROLE_PERMISSIONS = {
     "pay_loan"
   ]
 };
+
+const APPROVAL_THRESHOLD_AMOUNT = 1000;
 
 function buildPermissions(role) {
   const base = ROLE_PERMISSIONS[String(role || "").trim()] || [];
@@ -256,6 +268,7 @@ function buildTenantStore(store, tenantId) {
       fines: (store.fines || []).map((item) => ({ ...item })),
       loans: (store.loans || []).map((item) => ({ ...item })),
       transactions: (store.transactions || []).map((item) => ({ ...item })),
+      approval_requests: (store.approval_requests || []).map((item) => ({ ...item })),
       employments: (store.employments || []).map((item) => ({ ...item })),
       audit_logs: (store.audit_logs || []).map((item) => ({ ...item })),
       vault_incidents: (store.vault_incidents || []).map((item) => ({ ...item })),
@@ -289,6 +302,7 @@ function buildTenantStore(store, tenantId) {
     fines: (store.fines || []).filter((item) => accountIds.has(item.account_id)),
     loans: (store.loans || []).filter((item) => accountIds.has(item.account_id)),
     transactions: (store.transactions || []).filter((item) => accountIds.has(item.account_id)),
+    approval_requests: (store.approval_requests || []).filter((item) => item.tenant_id === tenantId),
     employments: (store.employments || []).filter((item) => item.tenant_id === tenantId),
     audit_logs: (store.audit_logs || []).filter((item) => item.tenant_id === tenantId),
     vault_incidents: (store.vault_incidents || []).filter((item) => item.tenant_id === tenantId),
@@ -554,6 +568,14 @@ function nextOrganizationId(store) {
   return "ORG-" + String(next);
 }
 
+function nextApprovalRequestId(store) {
+  const numeric = (store.approval_requests || [])
+    .map((item) => Number(String(item.approval_request_id || "").replace("APR-", "")))
+    .filter((value) => Number.isFinite(value));
+  const next = (numeric.length ? Math.max(...numeric) : 1000) + 1;
+  return "APR-" + String(next);
+}
+
 function buildActivationCode(tenantId) {
   return "ACT-" + String(tenantId).replace("tenant-", "").padStart(6, "0");
 }
@@ -583,6 +605,53 @@ function appendPortalAudit(store, actorName, tenantId, objectType, objectId, tar
     amount: amount || 0,
     memo: memo || ""
   });
+}
+
+function findApprovalRequest(store, tenantId, approvalRequestId) {
+  return (store.approval_requests || []).find((item) => item.tenant_id === tenantId && item.approval_request_id === approvalRequestId) || null;
+}
+
+function createApprovalRequest(store, tenantId, actorName, requestType, input) {
+  if (!Array.isArray(store.approval_requests)) {
+    store.approval_requests = [];
+  }
+
+  const approvalRequest = {
+    approval_request_id: nextApprovalRequestId(store),
+    tenant_id: tenantId,
+    request_type: requestType,
+    status: "PENDING",
+    requested_by: actorName,
+    requested_at: new Date().toISOString(),
+    reviewed_by: "",
+    reviewed_at: "",
+    source_account_id: input.source_account_id || "",
+    target_account_id: input.target_account_id || "",
+    source_organization_id: input.source_organization_id || "",
+    target_organization_id: input.target_organization_id || "",
+    amount: Number(input.amount || 0),
+    memo: String(input.memo || "").trim(),
+    payload: { ...(input.payload || {}) }
+  };
+
+  store.approval_requests.push(approvalRequest);
+  appendPortalAudit(
+    store,
+    actorName,
+    tenantId,
+    "approval_request",
+    approvalRequest.approval_request_id,
+    approvalRequest.target_account_id || approvalRequest.source_account_id || "",
+    "approval_request_create",
+    approvalRequest.amount,
+    `${requestType} submitted for approval`
+  );
+  return approvalRequest;
+}
+
+function shouldQueueApproval(requestType, amount) {
+  return ["transfer_organization", "disburse_organization"].includes(requestType)
+    && Number(amount || 0) >= APPROVAL_THRESHOLD_AMOUNT;
 }
 
 async function login(store, payload) {
@@ -2109,6 +2178,64 @@ function disburseOrganizationTreasury(store, tenantId, actorName, organizationId
   );
 }
 
+function approveRequest(store, tenantId, actorName, approvalRequestId) {
+  const request = findApprovalRequest(store, tenantId, approvalRequestId);
+  if (!request) {
+    throw new Error("Approval request not found.");
+  }
+  if (request.status !== "PENDING") {
+    throw new Error("Approval request has already been reviewed.");
+  }
+
+  const payload = request.payload || {};
+  if (request.request_type === "transfer_organization") {
+    transferOrganizationTreasury(
+      store,
+      tenantId,
+      actorName,
+      payload.organization_id,
+      payload.target_organization_id,
+      payload.amount,
+      payload
+    );
+  } else if (request.request_type === "disburse_organization") {
+    disburseOrganizationTreasury(
+      store,
+      tenantId,
+      actorName,
+      payload.organization_id,
+      payload.target_account_id,
+      payload.amount,
+      payload
+    );
+  } else {
+    throw new Error("Unsupported approval request type.");
+  }
+
+  request.status = "APPROVED";
+  request.reviewed_by = actorName;
+  request.reviewed_at = new Date().toISOString();
+  appendPortalAudit(store, actorName, tenantId, "approval_request", request.approval_request_id, request.target_account_id || "", "approval_request_approve", request.amount, `${request.request_type} approved`);
+}
+
+function denyRequest(store, tenantId, actorName, approvalRequestId, payload = {}) {
+  const request = findApprovalRequest(store, tenantId, approvalRequestId);
+  if (!request) {
+    throw new Error("Approval request not found.");
+  }
+  if (request.status !== "PENDING") {
+    throw new Error("Approval request has already been reviewed.");
+  }
+
+  request.status = "DENIED";
+  request.reviewed_by = actorName;
+  request.reviewed_at = new Date().toISOString();
+  if (payload.reason) {
+    request.memo = String(payload.reason).trim();
+  }
+  appendPortalAudit(store, actorName, tenantId, "approval_request", request.approval_request_id, request.target_account_id || "", "approval_request_deny", request.amount, String(payload.reason || "").trim() || `${request.request_type} denied`);
+}
+
 function resolveOrganizationTenantId(store, actorUser, payload) {
   if (actorUser.tenant_id !== "platform-root") {
     return actorUser.tenant_id;
@@ -2131,6 +2258,7 @@ function resolveOrganizationTenantId(store, actorUser, payload) {
 async function adminAction(store, payload) {
   const user = requireSession(store, payload);
   const actorName = payload.actor_name || user.username;
+  let actionMessage = "Action completed.";
 
   switch (payload.action_type) {
     case "dispatch_police":
@@ -2259,27 +2387,83 @@ async function adminAction(store, payload) {
       break;
     case "transfer_organization":
       requirePermission(user, "transfer_organization");
-      transferOrganizationTreasury(
-        store,
-        resolveOrganizationTenantId(store, user, payload),
-        actorName,
-        payload.organization_id,
-        payload.target_organization_id,
-        payload.amount,
-        payload
-      );
+      if (shouldQueueApproval("transfer_organization", payload.amount) && !payload.approved_request_id) {
+        {
+          const tenantId = resolveOrganizationTenantId(store, user, payload);
+          const source = findOrganization(store, tenantId, payload.organization_id);
+          const target = findOrganization(store, tenantId, payload.target_organization_id);
+          const request = createApprovalRequest(store, tenantId, actorName, "transfer_organization", {
+            source_organization_id: payload.organization_id,
+            target_organization_id: payload.target_organization_id,
+            source_account_id: source?.treasury_account_id || "",
+            target_account_id: target?.treasury_account_id || "",
+            amount: payload.amount,
+            memo: payload.memo,
+            payload: {
+              target_tenant_id: tenantId,
+              organization_id: payload.organization_id,
+              target_organization_id: payload.target_organization_id,
+              amount: payload.amount,
+              memo: payload.memo
+            }
+          });
+          actionMessage = `Transfer queued for approval as ${request.approval_request_id}.`;
+        }
+      } else {
+        transferOrganizationTreasury(
+          store,
+          resolveOrganizationTenantId(store, user, payload),
+          actorName,
+          payload.organization_id,
+          payload.target_organization_id,
+          payload.amount,
+          payload
+        );
+      }
       break;
     case "disburse_organization":
       requirePermission(user, "disburse_organization");
-      disburseOrganizationTreasury(
-        store,
-        resolveOrganizationTenantId(store, user, payload),
-        actorName,
-        payload.organization_id,
-        payload.target_account_id,
-        payload.amount,
-        payload
-      );
+      if (shouldQueueApproval("disburse_organization", payload.amount) && !payload.approved_request_id) {
+        {
+          const tenantId = resolveOrganizationTenantId(store, user, payload);
+          const organization = findOrganization(store, tenantId, payload.organization_id);
+          const request = createApprovalRequest(store, tenantId, actorName, "disburse_organization", {
+            source_organization_id: payload.organization_id,
+            source_account_id: organization?.treasury_account_id || "",
+            target_account_id: payload.target_account_id,
+            amount: payload.amount,
+            memo: payload.memo,
+            payload: {
+              target_tenant_id: tenantId,
+              organization_id: payload.organization_id,
+              target_account_id: payload.target_account_id,
+              amount: payload.amount,
+              memo: payload.memo
+            }
+          });
+          actionMessage = `Disbursement queued for approval as ${request.approval_request_id}.`;
+        }
+      } else {
+        disburseOrganizationTreasury(
+          store,
+          resolveOrganizationTenantId(store, user, payload),
+          actorName,
+          payload.organization_id,
+          payload.target_account_id,
+          payload.amount,
+          payload
+        );
+      }
+      break;
+    case "approve_request":
+      requirePermission(user, "approve_request");
+      approveRequest(store, user.tenant_id, actorName, payload.approval_request_id);
+      actionMessage = `Approval request ${payload.approval_request_id} approved.`;
+      break;
+    case "deny_request":
+      requirePermission(user, "deny_request");
+      denyRequest(store, user.tenant_id, actorName, payload.approval_request_id, payload);
+      actionMessage = `Approval request ${payload.approval_request_id} denied.`;
       break;
     case "withdraw_account":
       requirePermission(user, "withdraw_account");
@@ -2341,7 +2525,7 @@ async function adminAction(store, payload) {
   await writeStore(store);
   return {
     ok: true,
-    message: "Action completed.",
+    message: actionMessage,
     store: user.role === "customer" ? buildCustomerStore(store, user) : buildTenantStore(store, user.tenant_id)
   };
 }

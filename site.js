@@ -50,6 +50,7 @@ const VIEW_PERMISSIONS = {
   platform: "view_platform",
   "bank-core": "view_bank_core",
   alerts: "view_alerts",
+  approvals: "view_approvals",
   reports: "view_reports",
   accounts: "view_accounts",
   organizations: "view_organizations",
@@ -567,6 +568,10 @@ function getFlaggedAccounts(store) {
   return safeArray(store.accounts).filter((account) => account.risk_flag);
 }
 
+function getPendingApprovals(store) {
+  return safeArray(store.approval_requests).filter((item) => item.status === "PENDING");
+}
+
 function getTotalActiveLoanBalance(store) {
   return safeArray(store.loans)
     .filter((loan) => loan.status === "ACTIVE")
@@ -668,6 +673,7 @@ function getBankCoreRows(store) {
   const dueFineCount = safeArray(store.fines).filter((fine) => fine.status === "DUE").length;
   const activeLoanCount = safeArray(store.loans).filter((loan) => loan.status === "ACTIVE").length;
   const flaggedAccounts = getFlaggedAccounts(store);
+  const pendingApprovals = getPendingApprovals(store);
   const payrollBurden = safeArray(store.organizations)
     .filter((organization) => organization.status === "ACTIVE")
     .reduce((total, organization) => total + getOrganizationPayrollBurden(store, organization.organization_id), 0);
@@ -680,6 +686,13 @@ function getBankCoreRows(store) {
       { chip: flaggedAccounts.length ? "WATCH" : (activeAccounts ? "ONLINE" : "IDLE"), tone: flaggedAccounts.length ? "alert" : (activeAccounts ? "" : "dim") },
       `${activeAccounts} active account(s) / ${customerPortals} portal login(s) / ${flaggedAccounts.length} flagged`,
       `${safeArray(store.cards).length} card(s) issued and ${safeArray(store.transactions).length} transaction record(s) available`
+    ],
+    [
+      "Approvals",
+      "Dual-control queue for sensitive treasury actions",
+      { chip: pendingApprovals.length ? "PENDING" : "CLEAR", tone: pendingApprovals.length ? "alert" : "dim" },
+      `${pendingApprovals.length} approval request(s) waiting for review`,
+      pendingApprovals.length ? "Large treasury actions are waiting for approval" : "No pending approval requests"
     ],
     [
       "Organizations",
@@ -836,6 +849,7 @@ function getAlertRows(store) {
   const incidents = safeArray(store.vault_incidents).filter((incident) => incident.state === "ACTIVE");
   const offlineAtms = safeArray(store.atms).filter((atm) => atm.status !== "ONLINE");
   const flaggedAccounts = getFlaggedAccounts(store);
+  const pendingApprovals = getPendingApprovals(store);
 
   incidents.forEach((incident) => {
     rows.push([
@@ -924,6 +938,16 @@ function getAlertRows(store) {
       account.account_id,
       account.status === "FROZEN" ? "FLAGGED + FROZEN" : "FLAGGED",
       account.risk_note || `${account.customer_name} is marked for review`
+    ]);
+  });
+
+  pendingApprovals.forEach((request) => {
+    rows.push([
+      "WARN",
+      "Approval Queue",
+      request.approval_request_id,
+      "PENDING REVIEW",
+      `${request.request_type} / L$${Number(request.amount || 0)} requested by ${request.requested_by}`
     ]);
   });
 
@@ -1158,6 +1182,7 @@ function renderTable(view) {
   const searchPlaceholders = {
     platform: "Search tenant, bank, owner, license, or activity",
     "bank-core": "Search module, scope, health, or note",
+    approvals: "Search request, requester, amount, status, or memo",
     accounts: "Search customer, account, balance, or status",
     organizations: "Search organization, type, treasury account, balance, or status",
     employment: "Search employee, employer, title, department, or pay rate",
@@ -1246,6 +1271,33 @@ function renderTable(view) {
         row[2],
         { chip: row[3], tone: row[3] === "MISCONFIGURED" || row[3] === "UNDER RESERVE" || row[3] === "OVER BUDGET" ? "alert" : "" },
         row[4]
+      ]);
+  } else if (view === "approvals") {
+    title.textContent = "Approvals";
+    columns = ["Request ID", "Type", "Requested By", "Amount", "Status", "Actions"];
+    rows = safeArray(store.approval_requests)
+      .filter((request) => matchesSearch([
+        request.approval_request_id,
+        request.request_type,
+        request.requested_by,
+        String(request.amount || 0),
+        request.status,
+        request.memo || ""
+      ]))
+      .map((request) => [
+        request.approval_request_id,
+        request.request_type,
+        `${request.requested_by}<br><span class="dim-copy">${String(request.requested_at || "").replace("T", " ").slice(0, 16) || "-"}</span>`,
+        { money: request.amount || 0 },
+        { chip: request.status, tone: request.status === "PENDING" ? "alert" : (request.status === "APPROVED" ? "" : "dim") },
+        {
+          actions: request.status === "PENDING"
+            ? [
+              { label: "Approve", kind: "approve-request", approvalRequestId: request.approval_request_id, permission: "approve_request" },
+              { label: "Deny", kind: "deny-request", approvalRequestId: request.approval_request_id, tone: "danger", permission: "deny_request" }
+            ]
+            : []
+        }
       ]);
   } else if (view === "reports") {
     title.textContent = "Reports";
@@ -1520,7 +1572,7 @@ function renderTable(view) {
     }
     if (cell && typeof cell === "object" && "actions" in cell) {
       return `<td><div class="row-actions">${cell.actions.length ? cell.actions.map((action) =>
-        `<button class="row-action ${action.tone || ""}" type="button" ${action.permission && !hasPermission(action.permission) ? "disabled" : ""} data-row-action="${action.kind}" data-account-id="${action.accountId || ""}" data-card-id="${action.cardId || ""}" data-fine-id="${action.fineId || ""}" data-loan-id="${action.loanId || ""}" data-user-id="${action.userId || ""}" data-tenant-id="${action.tenantId || ""}" data-employment-id="${action.employmentId || ""}" data-organization-id="${action.organizationId || ""}">${action.label}</button>`
+        `<button class="row-action ${action.tone || ""}" type="button" ${action.permission && !hasPermission(action.permission) ? "disabled" : ""} data-row-action="${action.kind}" data-account-id="${action.accountId || ""}" data-card-id="${action.cardId || ""}" data-fine-id="${action.fineId || ""}" data-loan-id="${action.loanId || ""}" data-user-id="${action.userId || ""}" data-tenant-id="${action.tenantId || ""}" data-employment-id="${action.employmentId || ""}" data-organization-id="${action.organizationId || ""}" data-approval-request-id="${action.approvalRequestId || ""}">${action.label}</button>`
       ).join("") : '<span class="dim-copy">No actions</span>'}</div></td>`;
     }
     return `<td>${cell}</td>`;
@@ -2129,6 +2181,58 @@ async function runLoanAction(loanId) {
 
   applyStore(result.store);
   addLog(result.message || `Loan payment applied to ${loanId}.`);
+}
+
+async function runApprovalAction(kind, approvalRequestId) {
+  if (!approvalRequestId) {
+    addLog("Missing approval request id.");
+    return;
+  }
+
+  if (kind === "approve-request") {
+    const confirmed = await confirmAction(
+      "Approve Request",
+      `Approve <strong>${approvalRequestId}</strong> and execute the queued treasury action now?`,
+      "Approve Request"
+    );
+    if (!confirmed) {
+      addLog(`Approval canceled for ${approvalRequestId}.`);
+      return;
+    }
+    const result = await runAdminAction("approve_request", { approval_request_id: approvalRequestId });
+    if (!result.ok) {
+      addLog(result.error || "Approval request failed.");
+      return;
+    }
+    applyStore(result.store);
+    addLog(result.message || `${approvalRequestId} approved.`);
+    return;
+  }
+
+  if (kind === "deny-request") {
+    const values = await openActionModal({
+      title: "Deny Request",
+      submitLabel: "Deny Request",
+      copy: `Deny <strong>${approvalRequestId}</strong> and optionally record a reason.`,
+      fields: [
+        { name: "reason", label: "Reason", type: "textarea", value: "" }
+      ]
+    });
+    if (!values) {
+      addLog(`Denial canceled for ${approvalRequestId}.`);
+      return;
+    }
+    const result = await runAdminAction("deny_request", {
+      approval_request_id: approvalRequestId,
+      reason: String(values.reason || "").trim()
+    });
+    if (!result.ok) {
+      addLog(result.error || "Deny request failed.");
+      return;
+    }
+    applyStore(result.store);
+    addLog(result.message || `${approvalRequestId} denied.`);
+  }
 }
 
 async function runStaffAction(kind, userId) {
@@ -2897,6 +3001,10 @@ function wireAdminActions() {
     }
     if (["edit-tenant", "suspend-tenant", "activate-tenant", "reissue-code", "delete-tenant", "suspend-license", "activate-license", "extend-license", "expire-license"].includes(kind)) {
       await runTenantAction(kind, button.dataset.tenantId);
+      return;
+    }
+    if (["approve-request", "deny-request"].includes(kind)) {
+      await runApprovalAction(kind, button.dataset.approvalRequestId);
       return;
     }
     if (["lock-card", "unlock-card", "report-stolen-card"].includes(kind)) {
