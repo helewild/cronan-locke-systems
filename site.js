@@ -49,6 +49,7 @@ const STAFF_ROLE_HELP = {
 const VIEW_PERMISSIONS = {
   platform: "view_platform",
   "bank-core": "view_bank_core",
+  reports: "view_reports",
   accounts: "view_accounts",
   organizations: "view_organizations",
   employment: "view_employment",
@@ -734,6 +735,91 @@ function getBankCoreRows(store) {
   ];
 }
 
+function getReportRows(store) {
+  const transactions = getTransactions(store);
+  const customerAccounts = safeArray(store.accounts).filter((account) => account.player_id);
+  const organizationAccounts = safeArray(store.accounts).filter((account) => !account.player_id);
+  const totalCustomerBalances = customerAccounts.reduce((total, account) => total + Number(account.balance || 0), 0);
+  const totalTreasuryBalances = organizationAccounts.reduce((total, account) => total + Number(account.balance || 0), 0);
+  const payrollTransactions = transactions.filter((txn) => txn.type === "PAYROLL");
+  const taxTransactions = transactions.filter((txn) => txn.type === "PAYROLL_TAX");
+  const playerTransferTransactions = transactions.filter((txn) => txn.type === "PLAYER_TRANSFER");
+  const disbursementTransactions = transactions.filter((txn) => txn.type === "TREASURY_DISBURSEMENT");
+  const dueFineAmount = getTotalDueFines(store);
+  const activeLoanBalance = getTotalActiveLoanBalance(store);
+  const riskSummary = getOrganizationRiskSummary(store);
+  const payrollHealth = getPayrollHealth(store);
+  const taxConfig = getTaxConfiguration(store);
+
+  return [
+    [
+      "Customer Deposits",
+      "Player Account Balances",
+      { money: totalCustomerBalances },
+      { chip: customerAccounts.length ? "LIVE" : "IDLE", tone: customerAccounts.length ? "" : "dim" },
+      `${customerAccounts.length} player account(s)`
+    ],
+    [
+      "Treasury Holdings",
+      "Organization Treasury Balances",
+      { money: totalTreasuryBalances },
+      { chip: organizationAccounts.length ? "FUNDED" : "IDLE", tone: organizationAccounts.length ? "" : "dim" },
+      `${organizationAccounts.length} treasury account(s)`
+    ],
+    [
+      "Payroll Outflow",
+      "Gross payroll transactions on record",
+      { money: payrollTransactions.reduce((total, txn) => total + Number(txn.amount || 0), 0) },
+      { chip: payrollHealth.label, tone: payrollHealth.tone },
+      payrollHealth.note
+    ],
+    [
+      "Tax Collected",
+      "Payroll tax withheld to public treasury",
+      { money: taxTransactions.reduce((total, txn) => total + Number(txn.amount || 0), 0) },
+      { chip: taxConfig.rate > 0 ? "WITHHOLDING" : "DISABLED", tone: taxConfig.rate > 0 ? "" : "dim" },
+      taxConfig.rate > 0
+        ? `${taxConfig.rate}% routed to ${taxConfig.organization?.name || "UNASSIGNED"}`
+        : "No payroll tax configured"
+    ],
+    [
+      "Player Transfers",
+      "Customer-to-customer movement",
+      { money: playerTransferTransactions.filter((txn) => txn.direction === "OUT").reduce((total, txn) => total + Number(txn.amount || 0), 0) },
+      { chip: playerTransferTransactions.length ? "ACTIVE" : "IDLE", tone: playerTransferTransactions.length ? "" : "dim" },
+      `${Math.floor(playerTransferTransactions.length / 2)} transfer event(s)`
+    ],
+    [
+      "Public Disbursements",
+      "Treasury payments to players",
+      { money: disbursementTransactions.filter((txn) => txn.direction === "OUT").reduce((total, txn) => total + Number(txn.amount || 0), 0) },
+      { chip: disbursementTransactions.length ? "FLOWING" : "IDLE", tone: disbursementTransactions.length ? "" : "dim" },
+      `${Math.floor(disbursementTransactions.length / 2)} treasury disbursement(s)`
+    ],
+    [
+      "Outstanding Fines",
+      "Collections still due",
+      { money: dueFineAmount },
+      { chip: dueFineAmount > 0 ? "COLLECTIONS" : "CLEAR", tone: dueFineAmount > 0 ? "alert" : "" },
+      `${safeArray(store.fines).filter((fine) => fine.status === "DUE").length} due fine(s)`
+    ],
+    [
+      "Active Credit",
+      "Loan principal currently outstanding",
+      { money: activeLoanBalance },
+      { chip: activeLoanBalance > 0 ? "SERVICING" : "IDLE", tone: activeLoanBalance > 0 ? "" : "dim" },
+      `${safeArray(store.loans).filter((loan) => loan.status === "ACTIVE").length} active loan(s)`
+    ],
+    [
+      "Organization Watchlist",
+      "Reserve and payroll funding risks",
+      `${riskSummary.payrollRisk} payroll / ${riskSummary.underReserve} reserve / ${riskSummary.overBudget} budget`,
+      { chip: (riskSummary.payrollRisk || riskSummary.underReserve || riskSummary.overBudget) ? "WATCH" : "STABLE", tone: (riskSummary.payrollRisk || riskSummary.underReserve || riskSummary.overBudget) ? "alert" : "" },
+      `${riskSummary.active} active organization(s)`
+    ]
+  ];
+}
+
 function ensureSelectedAccount(store) {
   const accounts = safeArray(store.accounts);
   if (!accounts.length) {
@@ -1025,6 +1111,17 @@ function renderTable(view) {
         row[3],
         row[4]
       ]));
+  } else if (view === "reports") {
+    title.textContent = "Reports";
+    columns = ["Report", "Scope", "Value", "Status", "Detail"];
+    rows = getReportRows(store)
+      .filter((row) => matchesSearch([
+        row[0],
+        row[1],
+        typeof row[2] === "object" ? String(row[2].money) : row[2],
+        typeof row[3] === "object" ? row[3].chip : row[3],
+        row[4]
+      ]));
   } else if (view === "accounts") {
     title.textContent = "Accounts";
     columns = ["Account ID", "Customer", "Balance", "Status", "Actions"];
@@ -1090,6 +1187,7 @@ function renderTable(view) {
               { label: "Fund", kind: "fund-organization", organizationId: organization.organization_id, permission: "fund_organization" },
               { label: "Spend", kind: "spend-organization", organizationId: organization.organization_id, tone: "danger", permission: "spend_organization" },
               { label: "Transfer", kind: "transfer-organization", organizationId: organization.organization_id, permission: "transfer_organization" },
+              { label: "Disburse", kind: "disburse-organization", organizationId: organization.organization_id, permission: "disburse_organization" },
               { label: "Edit", kind: "edit-organization", organizationId: organization.organization_id, permission: "update_organization" },
               organization.status === "ACTIVE"
                 ? { label: "Deactivate", kind: "deactivate-organization", organizationId: organization.organization_id, tone: "danger", permission: "deactivate_organization" }
@@ -1980,6 +2078,67 @@ async function runOrganizationAction(kind, organizationId) {
     return;
   }
 
+  if (kind === "disburse-organization") {
+    const targetAccounts = safeArray(state.store?.accounts)
+      .filter((account) =>
+        account.tenant_id === organization.tenant_id
+        && account.player_id
+        && account.account_id !== organization.treasury_account_id
+        && account.status === "ACTIVE"
+      );
+    if (!targetAccounts.length) {
+      addLog("No active player accounts are available for disbursement.");
+      return;
+    }
+
+    const values = await openActionModal({
+      title: "Disburse Treasury Funds",
+      submitLabel: "Send Disbursement",
+      wide: true,
+      copy: `<strong>Source:</strong> ${organization.name}`,
+      fields: [
+        {
+          name: "target_account_id",
+          label: "Recipient Account",
+          type: "select",
+          required: true,
+          value: targetAccounts[0]?.account_id || "",
+          options: targetAccounts.map((account) => ({
+            value: account.account_id,
+            label: `${account.customer_name} (${account.account_id})`
+          }))
+        },
+        { name: "amount", label: "Amount", type: "number", required: true, value: "100" },
+        { name: "memo", label: "Memo Or Reason", type: "textarea", value: "Grant / stipend / reimbursement" }
+      ]
+    });
+    if (!values) {
+      addLog("Organization disbursement canceled.");
+      return;
+    }
+
+    const amount = Number(values.amount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      addLog("Disbursement amount must be greater than zero.");
+      return;
+    }
+
+    const result = await runAdminAction("disburse_organization", {
+      target_tenant_id: organization.tenant_id,
+      organization_id: organizationId,
+      target_account_id: String(values.target_account_id || "").trim(),
+      amount,
+      memo: String(values.memo || "").trim()
+    });
+    if (!result.ok) {
+      addLog(result.error || "Organization disbursement failed.");
+      return;
+    }
+    applyStore(result.store);
+    addLog(result.message || `Disbursed L$${amount} from ${organization.name}.`);
+    return;
+  }
+
   if (kind === "transfer-organization") {
     const candidates = safeArray(state.store?.organizations)
       .filter((item) => item.tenant_id === organization.tenant_id && item.organization_id !== organization.organization_id);
@@ -2510,6 +2669,7 @@ function wireAdminActions() {
       "create-organization",
       "fund-organization",
       "spend-organization",
+      "disburse-organization",
       "transfer-organization",
       "edit-organization",
       "deactivate-organization",

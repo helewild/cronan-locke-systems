@@ -34,6 +34,7 @@ const ROLE_PERMISSIONS = {
   platform_admin: [
     "view_platform",
     "view_bank_core",
+    "view_reports",
     "view_accounts",
     "view_organizations",
     "view_employment",
@@ -56,6 +57,7 @@ const ROLE_PERMISSIONS = {
     "fund_organization",
     "spend_organization",
     "transfer_organization",
+    "disburse_organization",
     "delete_tenant",
     "suspend_tenant",
     "activate_tenant",
@@ -89,6 +91,7 @@ const ROLE_PERMISSIONS = {
   ],
   tenant_owner: [
     "view_bank_core",
+    "view_reports",
     "view_accounts",
     "view_organizations",
     "view_employment",
@@ -110,6 +113,7 @@ const ROLE_PERMISSIONS = {
     "fund_organization",
     "spend_organization",
     "transfer_organization",
+    "disburse_organization",
     "create_staff_user",
     "disable_staff_user",
     "enable_staff_user",
@@ -135,6 +139,7 @@ const ROLE_PERMISSIONS = {
   ],
   bank_admin: [
     "view_bank_core",
+    "view_reports",
     "view_accounts",
     "view_organizations",
     "view_employment",
@@ -153,6 +158,7 @@ const ROLE_PERMISSIONS = {
     "fund_organization",
     "spend_organization",
     "transfer_organization",
+    "disburse_organization",
     "create_employment",
     "update_employment",
     "terminate_employment",
@@ -1972,6 +1978,76 @@ function transferOrganizationTreasury(store, tenantId, actorName, sourceOrganiza
   );
 }
 
+function disburseOrganizationTreasury(store, tenantId, actorName, organizationId, targetAccountId, amountInput, payload = {}) {
+  const organization = findOrganization(store, tenantId, organizationId);
+  if (!organization) {
+    throw new Error("Organization not found.");
+  }
+  if (String(organization.status || "").toUpperCase() !== "ACTIVE") {
+    throw new Error("Organization is not active.");
+  }
+
+  const treasury = findAccount(store, tenantId, organization.treasury_account_id);
+  if (!treasury || !isActive(treasury.status)) {
+    throw new Error("Treasury account is unavailable.");
+  }
+
+  const targetAccount = findAccount(store, tenantId, targetAccountId);
+  if (!targetAccount) {
+    throw new Error("Recipient account not found.");
+  }
+  if (!targetAccount.player_id) {
+    throw new Error("Disbursements must target a player account.");
+  }
+  if (!isActive(targetAccount.status)) {
+    throw new Error("Recipient account is not active.");
+  }
+  if (treasury.account_id === targetAccount.account_id) {
+    throw new Error("Choose a different recipient account.");
+  }
+
+  const amount = Number(amountInput || 0);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new Error("Disbursement amount must be greater than zero.");
+  }
+  if (Number(treasury.balance || 0) < amount) {
+    throw new Error("Insufficient treasury funds.");
+  }
+
+  const memo = String(payload.memo || "").trim() || (`Disbursement from ${organization.name}`);
+
+  treasury.balance = Number(treasury.balance || 0) - amount;
+  targetAccount.balance = Number(targetAccount.balance || 0) + amount;
+
+  createTransaction(store, {
+    account_id: treasury.account_id,
+    type: "TREASURY_DISBURSEMENT",
+    amount,
+    direction: "OUT",
+    memo: `${memo} -> ${targetAccount.customer_name}`
+  });
+
+  createTransaction(store, {
+    account_id: targetAccount.account_id,
+    type: "TREASURY_DISBURSEMENT",
+    amount,
+    direction: "IN",
+    memo: `${memo} <- ${organization.name}`
+  });
+
+  appendPortalAudit(
+    store,
+    actorName,
+    tenantId,
+    "organization",
+    organization.organization_id,
+    targetAccount.account_id,
+    "organization_disburse",
+    amount,
+    `${organization.name} -> ${targetAccount.customer_name}${payload.memo ? " / " + String(payload.memo).trim() : ""}`
+  );
+}
+
 function resolveOrganizationTenantId(store, actorUser, payload) {
   if (actorUser.tenant_id !== "platform-root") {
     return actorUser.tenant_id;
@@ -2128,6 +2204,18 @@ async function adminAction(store, payload) {
         actorName,
         payload.organization_id,
         payload.target_organization_id,
+        payload.amount,
+        payload
+      );
+      break;
+    case "disburse_organization":
+      requirePermission(user, "disburse_organization");
+      disburseOrganizationTreasury(
+        store,
+        resolveOrganizationTenantId(store, user, payload),
+        actorName,
+        payload.organization_id,
+        payload.target_account_id,
         payload.amount,
         payload
       );
