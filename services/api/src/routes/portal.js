@@ -18,6 +18,10 @@ function isActive(value) {
   return String(value || "").trim().toUpperCase() === "ACTIVE";
 }
 
+function normalizeNameKey(value) {
+  return String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
+}
+
 function ensureUsers(store) {
   if (!Array.isArray(store.users)) {
     store.users = [];
@@ -401,6 +405,32 @@ function findAccount(store, tenantId, accountId) {
   return (store.accounts || []).find((account) => account.tenant_id === tenantId && account.account_id === accountId) || null;
 }
 
+function findPlayerByAvatarName(store, tenantId, avatarName) {
+  const lookup = normalizeNameKey(avatarName);
+  if (!lookup) {
+    return null;
+  }
+
+  return (store.players || []).find((player) =>
+    player.tenant_id === tenantId
+    && normalizeNameKey(player.avatar_name) === lookup
+  ) || null;
+}
+
+function findAccountByAvatarName(store, tenantId, avatarName) {
+  const player = findPlayerByAvatarName(store, tenantId, avatarName);
+  if (player) {
+    return (store.accounts || []).find((account) => account.tenant_id === tenantId && account.player_id === player.player_id) || null;
+  }
+
+  const lookup = normalizeNameKey(avatarName);
+  return (store.accounts || []).find((account) =>
+    account.tenant_id === tenantId
+    && account.player_id
+    && normalizeNameKey(account.customer_name) === lookup
+  ) || null;
+}
+
 function findIncident(store, tenantId, incidentId) {
   return (store.vault_incidents || []).find((incident) => incident.tenant_id === tenantId && incident.incident_id === incidentId) || null;
 }
@@ -438,6 +468,10 @@ function findOrganizationAny(store, organizationId) {
 
 function findOrganizationByAccount(store, tenantId, accountId) {
   return (store.organizations || []).find((item) => item.tenant_id === tenantId && item.treasury_account_id === accountId) || null;
+}
+
+function findPrimaryCardForAccount(store, accountId) {
+  return (store.cards || []).find((card) => card.account_id === accountId) || null;
 }
 
 function findTenant(store, tenantId) {
@@ -526,6 +560,30 @@ function buildRegistrationResponse(store, tenantId, licenseId) {
     admin_url: config.adminBaseUrl || "",
     message: "Tenant registered from setup box."
   };
+}
+
+function getRecentTransactionsForAccount(store, accountId, countInput = 5) {
+  const count = Math.max(1, Math.min(20, Number(countInput || 5) || 5));
+  return (store.transactions || [])
+    .filter((item) => item.account_id === accountId)
+    .sort((left, right) => {
+      const leftStamp = new Date(left.created_at || 0).getTime() || 0;
+      const rightStamp = new Date(right.created_at || 0).getTime() || 0;
+      return rightStamp - leftStamp;
+    })
+    .slice(0, count)
+    .map((item) => ({ ...item }));
+}
+
+function requireObjectSecret(payload) {
+  const expected = String(config.objectApiSecret || "").trim();
+  if (!expected) {
+    return;
+  }
+
+  if (String(payload.object_secret || "").trim() !== expected) {
+    throw new Error("Invalid object bridge secret.");
+  }
 }
 
 function nextId(prefix, values) {
@@ -922,6 +980,207 @@ function shutdownAtmNetwork(store, tenantId, actorName) {
 
 function roundCurrency(value) {
   return Number(Number(value || 0).toFixed(2));
+}
+
+function buildObjectAtmResponse(store, payload, account, extra = {}) {
+  const tenant = findTenant(store, account.tenant_id);
+  const card = findPrimaryCardForAccount(store, account.account_id);
+  return {
+    ok: true,
+    object_type: "atm",
+    action_type: String(payload.action_type || "session"),
+    tenant: tenant ? {
+      tenant_id: tenant.tenant_id,
+      name: tenant.name,
+      bank_name: tenant.bank_name
+    } : null,
+    atm: {
+      atm_id: String(payload.atm_id || "").trim(),
+      branch_id: String(payload.branch_id || "").trim(),
+      region_id: String(payload.region_id || "").trim()
+    },
+    account: {
+      account_id: account.account_id,
+      customer_name: account.customer_name,
+      balance: Number(account.balance || 0),
+      status: account.status,
+      risk_flag: Boolean(account.risk_flag)
+    },
+    card: card ? {
+      card_id: card.card_id,
+      card_number: card.card_number,
+      state: card.state
+    } : null,
+    transactions: getRecentTransactionsForAccount(store, account.account_id, payload.statement_count || 5),
+    message: extra.message || "",
+    receipt: extra.receipt || null
+  };
+}
+
+function buildObjectCardResponse(store, payload, account, card, extra = {}) {
+  const tenant = findTenant(store, account.tenant_id);
+  return {
+    ok: true,
+    object_type: "card",
+    action_type: String(payload.action_type || "session"),
+    tenant: tenant ? {
+      tenant_id: tenant.tenant_id,
+      name: tenant.name,
+      bank_name: tenant.bank_name
+    } : null,
+    card: {
+      card_id: card.card_id,
+      card_number: card.card_number,
+      state: card.state
+    },
+    account: {
+      account_id: account.account_id,
+      customer_name: account.customer_name,
+      balance: Number(account.balance || 0),
+      status: account.status,
+      risk_flag: Boolean(account.risk_flag)
+    },
+    message: extra.message || ""
+  };
+}
+
+function ensureObjectAtmAccountReady(account, card) {
+  if (!isActive(account.status)) {
+    throw new Error("Account is not active for ATM use.");
+  }
+  if (Boolean(account.risk_flag)) {
+    throw new Error("Account is currently under review and blocked from ATM use.");
+  }
+  if (card && String(card.state || "").toUpperCase() !== "ACTIVE") {
+    throw new Error("Card is not active for ATM use.");
+  }
+}
+
+function objectCardAction(store, payload) {
+  requireObjectSecret(payload);
+  const tenantId = String(payload.tenant_id || "").trim();
+  const avatarName = String(payload.avatar_name || "").trim();
+  const actionType = String(payload.action_type || "session").trim().toLowerCase();
+  const actorName = `CARD ${String(payload.card_id || "bound-card").trim() || "bound-card"} / ${avatarName || "Unknown Resident"}`;
+
+  if (!tenantId) {
+    throw new Error("Card request is missing tenant_id.");
+  }
+  if (!avatarName) {
+    throw new Error("Card request is missing avatar_name.");
+  }
+
+  enforceTenantAccess(store, tenantId);
+  const account = findAccountByAvatarName(store, tenantId, avatarName);
+  if (!account) {
+    throw new Error("No bank account is linked to this resident.");
+  }
+
+  const card = findPrimaryCardForAccount(store, account.account_id);
+  if (!card) {
+    throw new Error("No bank card is linked to this account.");
+  }
+
+  if (actionType === "session" || actionType === "status") {
+    return buildObjectCardResponse(store, payload, account, card, {
+      message: `Card session ready for ${account.customer_name}.`
+    });
+  }
+
+  if (actionType === "lock") {
+    updateCardState(store, tenantId, actorName, card.card_id, "LOCKED", "card_lock", "Card locked from in-world card object", account.account_id);
+    return buildObjectCardResponse(store, payload, account, card, {
+      message: "Card locked."
+    });
+  }
+  if (actionType === "unlock") {
+    updateCardState(store, tenantId, actorName, card.card_id, "ACTIVE", "card_unlock", "Card unlocked from in-world card object", account.account_id);
+    return buildObjectCardResponse(store, payload, account, card, {
+      message: "Card unlocked."
+    });
+  }
+  if (actionType === "report_stolen") {
+    updateCardState(store, tenantId, actorName, card.card_id, "STOLEN", "card_report_stolen", "Card reported stolen from in-world card object", account.account_id);
+    return buildObjectCardResponse(store, payload, account, card, {
+      message: "Card reported stolen."
+    });
+  }
+
+  throw new Error("Unsupported card action.");
+}
+
+function objectAtmAction(store, payload) {
+  requireObjectSecret(payload);
+  const tenantId = String(payload.tenant_id || "").trim();
+  const avatarName = String(payload.avatar_name || "").trim();
+  const actionType = String(payload.action_type || "session").trim().toLowerCase();
+  const atmId = String(payload.atm_id || "atm-terminal").trim() || "atm-terminal";
+  const actorName = `ATM ${atmId} / ${avatarName || "Unknown Resident"}`;
+
+  if (!tenantId) {
+    throw new Error("ATM request is missing tenant_id.");
+  }
+  if (!avatarName) {
+    throw new Error("ATM request is missing avatar_name.");
+  }
+
+  enforceTenantAccess(store, tenantId);
+  const account = findAccountByAvatarName(store, tenantId, avatarName);
+  if (!account) {
+    throw new Error("No active bank account is linked to this resident.");
+  }
+  const card = findPrimaryCardForAccount(store, account.account_id);
+
+  if (actionType === "session" || actionType === "balance" || actionType === "statement") {
+    return buildObjectAtmResponse(store, payload, account, {
+      message: actionType === "statement"
+        ? "ATM statement prepared."
+        : `ATM session ready for ${account.customer_name}.`
+    });
+  }
+
+  if (actionType !== "withdraw" && actionType !== "deposit") {
+    throw new Error("Unsupported ATM action.");
+  }
+
+  ensureObjectAtmAccountReady(account, card);
+  const amount = roundCurrency(payload.amount);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new Error("ATM amount must be greater than zero.");
+  }
+  if (actionType === "withdraw" && Number(account.balance || 0) < amount) {
+    throw new Error("Insufficient funds for ATM withdrawal.");
+  }
+
+  account.balance = roundCurrency(Number(account.balance || 0) + (actionType === "withdraw" ? -amount : amount));
+  createTransaction(store, {
+    account_id: account.account_id,
+    type: actionType === "withdraw" ? "ATM_WITHDRAWAL" : "ATM_DEPOSIT",
+    amount,
+    direction: actionType === "withdraw" ? "OUT" : "IN",
+    memo: `${atmId} ${actionType}`
+  });
+  appendPortalAudit(
+    store,
+    actorName,
+    tenantId,
+    "atm",
+    atmId,
+    account.account_id,
+    actionType === "withdraw" ? "atm_withdraw" : "atm_deposit",
+    amount,
+    `${account.customer_name} ${actionType} at ${atmId}`
+  );
+
+  return buildObjectAtmResponse(store, payload, account, {
+    message: actionType === "withdraw" ? "ATM withdrawal approved." : "ATM deposit accepted.",
+    receipt: {
+      action: actionType.toUpperCase(),
+      account_id: account.account_id,
+      amount,
+      resulting_balance: Number(account.balance || 0)
+    }
+  });
 }
 
 function runPayroll(store, tenantId, actorName, amountInput) {
@@ -2560,6 +2819,20 @@ export async function handlePortal(req, res) {
   } else if (action === "register_tenant_box") {
     try {
       result = await registerTenantBox(store, body);
+    } catch (error) {
+      result = { ok: false, error: error.message };
+    }
+  } else if (action === "object_action") {
+    try {
+      if (String(body.object_type || "").trim().toLowerCase() === "atm") {
+        result = objectAtmAction(store, body);
+        await writeStore(store);
+      } else if (String(body.object_type || "").trim().toLowerCase() === "card") {
+        result = objectCardAction(store, body);
+        await writeStore(store);
+      } else {
+        result = { ok: false, error: "Unsupported object type." };
+      }
     } catch (error) {
       result = { ok: false, error: error.message };
     }

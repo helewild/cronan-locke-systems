@@ -5,8 +5,10 @@ Second Life object scripts live here.
 Current objects:
 
 - `scripts/atm/atm_mock.lsl`
+- `scripts/atm/atm_live.lsl`
 - `scripts/teller/teller_mock.lsl`
 - `scripts/card/card_mock.lsl`
+- `scripts/card/card_live.lsl`
 - `scripts/hud/hud_mock.lsl`
 - `scripts/vault/vault_mock.lsl`
 - `scripts/security/security_terminal_mock.lsl`
@@ -20,3 +22,4 @@ Rule:
 
 - Keep these scripts mock-ready and frontend-focused.
 - Move state and persistence to the backend later.
+- New live object bridge scripts should target the VPS API at `/api/v1/portal` using `action: "object_action"`.
