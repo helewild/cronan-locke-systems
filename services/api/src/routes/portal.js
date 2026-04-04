@@ -35,6 +35,7 @@ const ROLE_PERMISSIONS = {
     "view_platform",
     "view_bank_core",
     "view_reports",
+    "view_alerts",
     "view_accounts",
     "view_organizations",
     "view_employment",
@@ -92,6 +93,7 @@ const ROLE_PERMISSIONS = {
   tenant_owner: [
     "view_bank_core",
     "view_reports",
+    "view_alerts",
     "view_accounts",
     "view_organizations",
     "view_employment",
@@ -140,6 +142,7 @@ const ROLE_PERMISSIONS = {
   bank_admin: [
     "view_bank_core",
     "view_reports",
+    "view_alerts",
     "view_accounts",
     "view_organizations",
     "view_employment",
@@ -190,6 +193,7 @@ const ROLE_PERMISSIONS = {
   ],
   security_admin: [
     "view_bank_core",
+    "view_alerts",
     "view_vault_control",
     "view_incidents",
     "view_atm_network",

@@ -49,6 +49,7 @@ const STAFF_ROLE_HELP = {
 const VIEW_PERMISSIONS = {
   platform: "view_platform",
   "bank-core": "view_bank_core",
+  alerts: "view_alerts",
   reports: "view_reports",
   accounts: "view_accounts",
   organizations: "view_organizations",
@@ -820,6 +821,109 @@ function getReportRows(store) {
   ];
 }
 
+function getAlertRows(store) {
+  const rows = [];
+  const riskSummary = getOrganizationRiskSummary(store);
+  const payrollHealth = getPayrollHealth(store);
+  const taxConfig = getTaxConfiguration(store);
+  const dueFines = safeArray(store.fines).filter((fine) => fine.status === "DUE");
+  const activeLoans = safeArray(store.loans).filter((loan) => loan.status === "ACTIVE");
+  const incidents = safeArray(store.vault_incidents).filter((incident) => incident.state === "ACTIVE");
+  const offlineAtms = safeArray(store.atms).filter((atm) => atm.status !== "ONLINE");
+
+  incidents.forEach((incident) => {
+    rows.push([
+      "CRITICAL",
+      "Security Incident",
+      incident.incident_id,
+      incident.stage || "ACTIVE INCIDENT",
+      `${incident.responding_unit || "NO UNIT"} / ${incident.last_update || "Awaiting response"}`
+    ]);
+  });
+
+  offlineAtms.forEach((atm) => {
+    rows.push([
+      "WARN",
+      "ATM Network",
+      atm.atm_id || atm.id || "ATM",
+      `ATM ${atm.status || "OFFLINE"}`,
+      `${atm.branch_name || atm.branch || "Unknown branch"} is not online`
+    ]);
+  });
+
+  if (payrollHealth.label === "PAYROLL RISK") {
+    rows.push([
+      "WARN",
+      "Payroll Funding",
+      "NEXT RUN",
+      payrollHealth.label,
+      payrollHealth.note
+    ]);
+  }
+
+  if (taxConfig.rate > 0 && !taxConfig.organization) {
+    rows.push([
+      "WARN",
+      "Taxation",
+      "PAYROLL TAX",
+      "MISCONFIGURED",
+      "Payroll tax is enabled but no treasury organization is assigned"
+    ]);
+  }
+
+  if (riskSummary.underReserve > 0) {
+    rows.push([
+      "WARN",
+      "Treasury Reserve",
+      "ORGANIZATIONS",
+      "UNDER RESERVE",
+      `${riskSummary.underReserve} organization(s) are below reserve target`
+    ]);
+  }
+
+  if (riskSummary.overBudget > 0) {
+    rows.push([
+      "WARN",
+      "Budget Oversight",
+      "ORGANIZATIONS",
+      "OVER BUDGET",
+      `${riskSummary.overBudget} organization(s) exceed configured budget`
+    ]);
+  }
+
+  if (dueFines.length) {
+    rows.push([
+      "NOTICE",
+      "Collections",
+      "OUTSTANDING FINES",
+      `${dueFines.length} DUE`,
+      `L$${getTotalDueFines(store)} still outstanding in fines`
+    ]);
+  }
+
+  if (activeLoans.length) {
+    rows.push([
+      "NOTICE",
+      "Credit Exposure",
+      "ACTIVE LOANS",
+      `${activeLoans.length} ACTIVE`,
+      `L$${getTotalActiveLoanBalance(store)} remains outstanding in active loans`
+    ]);
+  }
+
+  if (!rows.length) {
+    rows.push([
+      "OK",
+      "System Health",
+      "ALL MODULES",
+      "NOMINAL",
+      "No active alerts require operator action right now"
+    ]);
+  }
+
+  return rows;
+}
+
 function ensureSelectedAccount(store) {
   const accounts = safeArray(store.accounts);
   if (!accounts.length) {
@@ -1111,6 +1215,18 @@ function renderTable(view) {
         row[3],
         row[4]
       ]));
+  } else if (view === "alerts") {
+    title.textContent = "Alerts";
+    columns = ["Severity", "Category", "Target", "State", "Detail"];
+    rows = getAlertRows(store)
+      .filter((row) => matchesSearch(row))
+      .map((row) => [
+        { chip: row[0], tone: row[0] === "CRITICAL" ? "alert" : (row[0] === "WARN" ? "dim" : "") },
+        row[1],
+        row[2],
+        { chip: row[3], tone: row[3] === "MISCONFIGURED" || row[3] === "UNDER RESERVE" || row[3] === "OVER BUDGET" ? "alert" : "" },
+        row[4]
+      ]);
   } else if (view === "reports") {
     title.textContent = "Reports";
     columns = ["Report", "Scope", "Value", "Status", "Detail"];
