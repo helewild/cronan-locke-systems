@@ -79,6 +79,68 @@ function nowStamp() {
   return "[" + new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }) + "]";
 }
 
+function parseTimestamp(value) {
+  if (!value) {
+    return 0;
+  }
+  const parsed = new Date(value).getTime();
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatTimestamp(value) {
+  if (!value) {
+    return "-";
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "-";
+  }
+  return date.toLocaleString([], {
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit"
+  });
+}
+
+function moneyText(value) {
+  const numeric = Number(value || 0);
+  return `L$${Number.isInteger(numeric) ? numeric : numeric.toFixed(2)}`;
+}
+
+function escapeCsvCell(value) {
+  const text = String(value ?? "");
+  if (/[",\r\n]/.test(text)) {
+    return `"${text.replace(/"/g, "\"\"")}"`;
+  }
+  return text;
+}
+
+function downloadCsv(filename, headers, rows) {
+  const csv = [
+    headers.map(escapeCsvCell).join(","),
+    ...rows.map((row) => row.map(escapeCsvCell).join(","))
+  ].join("\r\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
+function slugifyFilename(value) {
+  return String(value || "statement")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "statement";
+}
+
 function setClock(targetId) {
   const now = new Date();
   const text = "DATE: " + (now.getMonth() + 1) + "/" + now.getDate() + "/" + now.getFullYear()
@@ -454,7 +516,7 @@ function renderIncident() {
 function getTransactions(store) {
   const liveTransactions = safeArray(store.transactions);
   if (liveTransactions.length) {
-    return liveTransactions;
+    return [...liveTransactions].sort((left, right) => parseTimestamp(right.created_at) - parseTimestamp(left.created_at));
   }
 
   return safeArray(store.audit_logs).map((audit, index) => ({
@@ -463,8 +525,81 @@ function getTransactions(store) {
     type: String(audit.action || "audit").toUpperCase(),
     amount: Number(audit.amount || 0),
     direction: Number(audit.amount || 0) < 0 ? "OUT" : "IN",
-    memo: audit.memo || ""
-  }));
+    memo: audit.memo || "",
+    created_at: audit.created_at || ""
+  })).sort((left, right) => parseTimestamp(right.created_at) - parseTimestamp(left.created_at));
+}
+
+function exportPlayerStatement() {
+  const store = state.store || {};
+  const account = store.account || null;
+  const tenant = store.tenant || null;
+  const transactions = getTransactions(store);
+  if (!account || !transactions.length) {
+    addLog("No statement data available to export.");
+    return;
+  }
+
+  downloadCsv(
+    `${slugifyFilename(tenant?.bank_name || "bank")}-${slugifyFilename(account.account_id)}-statement.csv`,
+    ["Date", "Transaction ID", "Account", "Type", "Amount", "Direction", "Memo"],
+    transactions.map((txn) => [
+      formatTimestamp(txn.created_at),
+      txn.transaction_id || "",
+      txn.account_id || "",
+      txn.type || "",
+      Number(txn.amount || 0),
+      txn.direction || "",
+      txn.memo || ""
+    ])
+  );
+  addLog(`Statement exported for ${account.account_id}.`);
+}
+
+function exportTransactionsCsv() {
+  const store = state.store || {};
+  const transactions = getTransactions(store);
+  if (!transactions.length) {
+    addLog("No transactions available to export.");
+    return;
+  }
+
+  downloadCsv(
+    `cronan-locke-transactions-${new Date().toISOString().slice(0, 10)}.csv`,
+    ["Date", "Transaction ID", "Account", "Type", "Amount", "Direction", "Memo"],
+    transactions.map((txn) => [
+      formatTimestamp(txn.created_at),
+      txn.transaction_id || "",
+      txn.account_id || "",
+      txn.type || "",
+      Number(txn.amount || 0),
+      txn.direction || "",
+      txn.memo || ""
+    ])
+  );
+  addLog("Transaction register exported.");
+}
+
+function exportReportsCsv() {
+  const store = state.store || {};
+  const rows = getReportRows(store);
+  if (!rows.length) {
+    addLog("No report rows available to export.");
+    return;
+  }
+
+  downloadCsv(
+    `cronan-locke-reports-${new Date().toISOString().slice(0, 10)}.csv`,
+    ["Report", "Scope", "Value", "Status", "Detail"],
+    rows.map((row) => [
+      row[0],
+      row[1],
+      typeof row[2] === "object" ? Number(row[2].money || 0) : row[2],
+      typeof row[3] === "object" ? row[3].chip || "" : row[3],
+      row[4] || ""
+    ])
+  );
+  addLog("Report summary exported.");
 }
 
 function getLicenseForTenant(store, tenantId) {
@@ -1073,7 +1208,7 @@ function renderPlayerPortal() {
   const dueFine = fines.find((item) => item.status === "DUE") || null;
   const activeLoan = loans.find((item) => item.status === "ACTIVE") || null;
   const transferDirectory = getPlayerTransferDirectory();
-  const transactions = safeArray(store.transactions).slice(0, 8);
+  const transactions = getTransactions(store).slice(0, 8);
   const employment = safeArray(store.employments).find((item) => item.status === "ACTIVE") || null;
 
   document.getElementById("player-tenant-name").textContent = (tenant?.name || "NO TENANT").toUpperCase();
@@ -1110,13 +1245,14 @@ function renderPlayerPortal() {
   document.getElementById("player-transactions-body").innerHTML = transactions.length
     ? transactions.map((txn) => `
       <tr>
+        <td>${formatTimestamp(txn.created_at)}</td>
         <td>${txn.type}</td>
-        <td class="money">L$${Number(txn.amount || 0)}</td>
+        <td class="money">${moneyText(txn.amount)}</td>
         <td><span class="chip ${txn.direction === "OUT" ? "alert" : ""}">${txn.direction}</span></td>
         <td>${txn.memo || "-"}</td>
       </tr>
     `).join("")
-    : `<tr><td colspan="4" class="dim-copy">No transactions available.</td></tr>`;
+    : `<tr><td colspan="5" class="dim-copy">No transactions available.</td></tr>`;
 
   document.getElementById("player-card-state").textContent = cards.length ? cards.map((item) => item.state).join(", ") : "NONE";
   document.getElementById("player-fine-state").textContent = fines.some((item) => item.status === "DUE") ? "PAYMENT DUE" : "CLEAR";
@@ -1132,13 +1268,15 @@ function renderPlayerPortal() {
   const fineButton = document.getElementById("player-pay-fine-btn");
   const loanButton = document.getElementById("player-pay-loan-btn");
   const transferButton = document.getElementById("player-transfer-btn");
-  if (lockButton && unlockButton && reportButton && fineButton && loanButton && transferButton) {
+  const exportButton = document.getElementById("player-export-btn");
+  if (lockButton && unlockButton && reportButton && fineButton && loanButton && transferButton && exportButton) {
     lockButton.disabled = !primaryCard || primaryCard.state !== "ACTIVE";
     unlockButton.disabled = !primaryCard || primaryCard.state !== "LOCKED";
     reportButton.disabled = !primaryCard || primaryCard.state === "STOLEN";
     fineButton.disabled = !dueFine;
     loanButton.disabled = !activeLoan;
     transferButton.disabled = !account || !transferDirectory.length || account.status !== "ACTIVE";
+    exportButton.disabled = !transactions.length;
   }
 
   if (!primaryCard) {
@@ -1188,7 +1326,7 @@ function renderTable(view) {
     employment: "Search employee, employer, title, department, or pay rate",
     staff: "Search username, avatar, role, or status",
     cards: "Search card, account, state, or card number",
-    transactions: "Search type, account, amount, direction, or memo",
+    transactions: "Search date, type, account, amount, direction, or memo",
     fines: "Search fine, account, reference, amount, or status",
     loans: "Search loan, account, terms, balance, or status",
     "vault-control": "Search vault, stage, unit, or marked cash",
@@ -1467,14 +1605,16 @@ function renderTable(view) {
     ]);
   } else if (view === "transactions") {
     title.textContent = "Transactions";
-    columns = ["Type", "Account", "Amount", "Direction"];
+    columns = ["Date", "Type", "Account", "Amount", "Direction", "Memo"];
     rows = getTransactions(store)
-      .filter((txn) => matchesSearch([txn.type, txn.account_id, String(txn.amount), txn.direction, txn.memo || ""]))
+      .filter((txn) => matchesSearch([formatTimestamp(txn.created_at), txn.type, txn.account_id, String(txn.amount), txn.direction, txn.memo || ""]))
       .map((txn) => [
+      formatTimestamp(txn.created_at),
       txn.type,
       txn.account_id,
       { money: txn.amount },
-      { chip: txn.direction, tone: txn.direction === "OUT" ? "alert" : "" }
+      { chip: txn.direction, tone: txn.direction === "OUT" ? "alert" : "" },
+      txn.memo || "-"
     ]);
   } else if (view === "vault-control") {
     title.textContent = "Vault Control";
@@ -1594,14 +1734,20 @@ function setActiveView(view) {
     link.classList.toggle("hidden", !canAccessView(link.dataset.view));
   });
   const actionButton = document.getElementById("view-action-btn");
-  actionButton.classList.toggle("hidden", !(view === "platform" || view === "payroll" || view === "accounts" || view === "organizations" || view === "employment" || view === "staff"));
+  actionButton.classList.toggle("hidden", !(view === "platform" || view === "payroll" || view === "accounts" || view === "organizations" || view === "employment" || view === "staff" || view === "transactions" || view === "reports"));
   actionButton.textContent = view === "platform"
     ? "New Tenant"
     : (view === "accounts"
       ? "New Account"
       : (view === "organizations"
         ? "New Org"
-        : (view === "employment" ? "New Job" : (view === "staff" ? "New Staff" : "Run Payroll"))));
+        : (view === "employment"
+          ? "New Job"
+          : (view === "staff"
+            ? "New Staff"
+            : (view === "transactions"
+              ? "Export CSV"
+              : (view === "reports" ? "Export CSV" : "Run Payroll"))))));
   actionButton.disabled =
     view === "platform"
       ? !hasPermission("create_tenant")
@@ -1609,7 +1755,15 @@ function setActiveView(view) {
         ? !hasPermission("create_customer_account")
         : (view === "organizations"
           ? !hasPermission("create_organization")
-          : (view === "employment" ? !hasPermission("create_employment") : (view === "staff" ? !hasPermission("create_staff_user") : (view === "payroll" ? !hasPermission("run_payroll") : false)))));
+          : (view === "employment"
+            ? !hasPermission("create_employment")
+            : (view === "staff"
+              ? !hasPermission("create_staff_user")
+              : (view === "payroll"
+                ? !hasPermission("run_payroll")
+                : (view === "transactions"
+                  ? !hasPermission("view_transactions")
+                  : (view === "reports" ? !hasPermission("view_reports") : false)))))));
   renderTable(view);
   savePreviewState();
 }
@@ -3198,6 +3352,14 @@ function wireAdminActions() {
       openStaffModal();
       return;
     }
+    if (state.view === "transactions") {
+      exportTransactionsCsv();
+      return;
+    }
+    if (state.view === "reports") {
+      exportReportsCsv();
+      return;
+    }
     if (state.view !== "payroll") {
       return;
     }
@@ -3238,6 +3400,7 @@ function wireAdminActions() {
   document.getElementById("player-transfer-btn").addEventListener("click", async () => {
     await runPlayerTransferAction();
   });
+  document.getElementById("player-export-btn").addEventListener("click", exportPlayerStatement);
   document.getElementById("staff-role").addEventListener("change", updateStaffRoleHint);
   document.getElementById("staff-form").addEventListener("submit", submitStaffCreate);
   document.getElementById("staff-cancel").addEventListener("click", closeStaffModal);

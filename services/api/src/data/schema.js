@@ -184,10 +184,11 @@ export const STORE_TABLES = [
   {
     key: "transactions",
     table: "transactions",
-    columns: ["transaction_id", "account_id", "type", "amount", "direction", "memo"],
+    columns: ["transaction_id", "account_id", "type", "amount", "direction", "memo", "created_at"],
     numberColumns: ["amount"],
     defaults: {
-      amount: 0
+      amount: 0,
+      created_at: ""
     }
   },
   {
@@ -407,7 +408,8 @@ export const CREATE_TABLE_STATEMENTS = [
     type TEXT NOT NULL,
     amount NUMERIC(18,2) NOT NULL DEFAULT 0,
     direction TEXT NOT NULL,
-    memo TEXT
+    memo TEXT,
+    created_at TIMESTAMPTZ
   )`,
   `CREATE TABLE IF NOT EXISTS approval_requests (
     approval_request_id TEXT PRIMARY KEY,
@@ -489,6 +491,7 @@ export const CREATE_TABLE_STATEMENTS = [
   `ALTER TABLE employments ADD COLUMN IF NOT EXISTS organization_id TEXT`,
   `ALTER TABLE accounts ADD COLUMN IF NOT EXISTS risk_flag BOOLEAN NOT NULL DEFAULT FALSE`,
   `ALTER TABLE accounts ADD COLUMN IF NOT EXISTS risk_note TEXT`,
+  `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ`,
   `ALTER TABLE approval_requests ADD COLUMN IF NOT EXISTS payload JSONB NOT NULL DEFAULT '{}'::jsonb`,
   `ALTER TABLE licenses ADD COLUMN IF NOT EXISTS setup_box_key TEXT`,
   `ALTER TABLE licenses ADD COLUMN IF NOT EXISTS renewed_at TIMESTAMPTZ`,

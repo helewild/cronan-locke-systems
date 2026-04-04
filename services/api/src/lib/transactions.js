@@ -7,7 +7,8 @@ export function createTransaction(store, input) {
     type: input.type,
     amount: input.amount,
     direction: input.direction,
-    memo: input.memo || ""
+    memo: input.memo || "",
+    created_at: input.created_at || new Date().toISOString()
   };
 
   store.transactions.unshift(entry);
