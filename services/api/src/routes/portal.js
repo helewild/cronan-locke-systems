@@ -770,12 +770,31 @@ function shutdownAtmNetwork(store, tenantId, actorName) {
   appendPortalAudit(store, actorName, tenantId, "atm_network", "tenant-atm-network", null, "atm_network_shutdown", 0, "ATM network shutdown requested for " + touched + " ATM(s)");
 }
 
+function roundCurrency(value) {
+  return Number(Number(value || 0).toFixed(2));
+}
+
 function runPayroll(store, tenantId, actorName, amountInput) {
   const tenant = findTenant(store, tenantId);
   const employments = (store.employments || []).filter((employment) => employment.tenant_id === tenantId && String(employment.status || "").toUpperCase() === "ACTIVE");
   const fallbackAmount = Number(amountInput || tenant?.payroll_default_amount || 250);
+  const taxRate = Math.max(0, Number(tenant?.payroll_tax_rate || 0));
+  const taxOrganizationId = String(tenant?.tax_organization_id || "").trim();
+  const taxOrganization = taxOrganizationId ? findOrganization(store, tenantId, taxOrganizationId) : null;
+  const taxTreasury = taxOrganization ? findAccount(store, tenantId, taxOrganization.treasury_account_id) : null;
   if (!employments.length && (!Number.isFinite(fallbackAmount) || fallbackAmount <= 0)) {
     throw new Error("Amount must be greater than zero.");
+  }
+  if (taxRate > 100) {
+    throw new Error("Payroll tax rate cannot exceed 100%.");
+  }
+  if (taxRate > 0) {
+    if (!taxOrganization || String(taxOrganization.status || "").toUpperCase() !== "ACTIVE") {
+      throw new Error("Configured tax organization is unavailable.");
+    }
+    if (!taxTreasury || !isActive(taxTreasury.status)) {
+      throw new Error("Configured tax treasury account is unavailable.");
+    }
   }
 
   const activeAccounts = (store.accounts || []).filter((account) => account.tenant_id === tenantId && isActive(account.status));
@@ -819,17 +838,20 @@ function runPayroll(store, tenantId, actorName, amountInput) {
     if (!Number.isFinite(amount) || amount <= 0) {
       return;
     }
+    const grossAmount = roundCurrency(amount);
+    const taxAmount = roundCurrency(grossAmount * (taxRate / 100));
+    const netAmount = roundCurrency(Math.max(0, grossAmount - taxAmount));
     let payrollMemo = "VPS payroll run";
 
     if (employment?.organization_id) {
       const organization = findOrganization(store, tenantId, employment.organization_id);
       const treasury = organization ? findAccount(store, tenantId, organization.treasury_account_id) : null;
       if (treasury) {
-        treasury.balance = Number(treasury.balance || 0) - amount;
+        treasury.balance = roundCurrency(Number(treasury.balance || 0) - grossAmount);
         createTransaction(store, {
           account_id: treasury.account_id,
           type: "PAYROLL_DISBURSEMENT",
-          amount,
+          amount: grossAmount,
           direction: "OUT",
           memo: `${organization?.name || employment.employer_name} payroll for ${account.customer_name}`
         });
@@ -839,13 +861,35 @@ function runPayroll(store, tenantId, actorName, amountInput) {
       payrollMemo = `${employment.employer_name} payroll`;
     }
 
-    account.balance = Number(account.balance || 0) + amount;
+    if (taxAmount > 0 && taxTreasury) {
+      taxTreasury.balance = roundCurrency(Number(taxTreasury.balance || 0) + taxAmount);
+      createTransaction(store, {
+        account_id: taxTreasury.account_id,
+        type: "PAYROLL_TAX",
+        amount: taxAmount,
+        direction: "IN",
+        memo: `${tenant?.name || tenantId} payroll tax withheld from ${account.customer_name}`
+      });
+      appendPortalAudit(
+        store,
+        actorName,
+        tenantId,
+        "tax",
+        taxOrganization?.organization_id || "tenant-tax",
+        taxTreasury.account_id,
+        "payroll_tax_collect",
+        taxAmount,
+        `Payroll tax withheld from ${account.customer_name}`
+      );
+    }
+
+    account.balance = roundCurrency(Number(account.balance || 0) + netAmount);
     createTransaction(store, {
       account_id: account.account_id,
       type: "PAYROLL",
-      amount,
+      amount: netAmount,
       direction: "IN",
-      memo: payrollMemo
+      memo: taxAmount > 0 ? `${payrollMemo} (gross L$${grossAmount} / tax L$${taxAmount})` : payrollMemo
     });
     if (employment) {
       employment.last_paid_at = new Date().toISOString();
@@ -858,8 +902,10 @@ function runPayroll(store, tenantId, actorName, amountInput) {
       employment ? employment.employment_id : "vps-payroll",
       account.account_id,
       "payroll_run",
-      amount,
-      employment ? `Payroll deposit for ${employment.title}` : "Payroll deposit"
+      netAmount,
+      employment
+        ? `Payroll deposit for ${employment.title}${taxAmount > 0 ? ` (gross L$${grossAmount} / tax L$${taxAmount})` : ""}`
+        : `Payroll deposit${taxAmount > 0 ? ` (gross L$${grossAmount} / tax L$${taxAmount})` : ""}`
     );
   });
 }
@@ -875,6 +921,9 @@ function updateTenantSettings(store, tenantId, actorName, payload) {
   const nextBankName = String(payload.bank_name || tenant.bank_name).trim();
   const nextRegionName = String(payload.primary_region_name || tenant.primary_region_name || "").trim();
   const nextPayroll = Number(payload.payroll_default_amount ?? tenant.payroll_default_amount ?? 250);
+  const nextTaxRate = Number(payload.payroll_tax_rate ?? tenant.payroll_tax_rate ?? 0);
+  const nextTaxOrganizationId = String(payload.tax_organization_id ?? tenant.tax_organization_id ?? "").trim();
+  const nextTaxOrganization = nextTaxOrganizationId ? findOrganization(store, targetTenantId, nextTaxOrganizationId) : null;
 
   if (!nextTenantName || !nextBankName) {
     throw new Error("Tenant and bank name are required.");
@@ -882,11 +931,22 @@ function updateTenantSettings(store, tenantId, actorName, payload) {
   if (!Number.isFinite(nextPayroll) || nextPayroll <= 0) {
     throw new Error("Payroll default must be greater than zero.");
   }
+  if (!Number.isFinite(nextTaxRate) || nextTaxRate < 0 || nextTaxRate > 100) {
+    throw new Error("Payroll tax rate must be between 0 and 100.");
+  }
+  if (nextTaxRate > 0 && !nextTaxOrganizationId) {
+    throw new Error("Select a tax treasury organization before enabling payroll tax.");
+  }
+  if (nextTaxOrganizationId && !nextTaxOrganization) {
+    throw new Error("Selected tax organization was not found.");
+  }
 
   tenant.name = nextTenantName;
   tenant.bank_name = nextBankName;
   tenant.primary_region_name = nextRegionName;
   tenant.payroll_default_amount = nextPayroll;
+  tenant.payroll_tax_rate = nextTaxRate;
+  tenant.tax_organization_id = nextTaxOrganizationId;
 
   const regions = (store.regions || []).filter((item) => item.tenant_id === targetTenantId);
   if (regions.length && nextRegionName) {
@@ -904,7 +964,7 @@ function updateTenantSettings(store, tenantId, actorName, payload) {
     }
   });
 
-  appendPortalAudit(store, actorName, targetTenantId, "tenant", targetTenantId, null, "tenant_settings_update", nextPayroll, "Tenant settings updated");
+  appendPortalAudit(store, actorName, targetTenantId, "tenant", targetTenantId, null, "tenant_settings_update", nextPayroll, `Tenant settings updated${nextTaxRate > 0 ? ` / tax ${nextTaxRate}%` : ""}`);
 }
 
 function createTenant(store, actorName, payload) {
@@ -913,6 +973,8 @@ function createTenant(store, actorName, payload) {
   const bankName = String(payload.bank_name || "").trim();
   const regionName = String(payload.primary_region_name || "").trim();
   const payrollDefault = Number(payload.payroll_default_amount || 250);
+  const payrollTaxRate = Number(payload.payroll_tax_rate || 0);
+  const taxOrganizationId = String(payload.tax_organization_id || "").trim();
   const licenseStatus = String(payload.license_status || "TRIAL").trim().toUpperCase();
   const issuedAt = new Date().toISOString();
   const expiresAt = payload.license_expires_at
@@ -924,6 +986,12 @@ function createTenant(store, actorName, payload) {
   }
   if (!Number.isFinite(payrollDefault) || payrollDefault <= 0) {
     throw new Error("Payroll default must be greater than zero.");
+  }
+  if (!Number.isFinite(payrollTaxRate) || payrollTaxRate < 0 || payrollTaxRate > 100) {
+    throw new Error("Payroll tax rate must be between 0 and 100.");
+  }
+  if (payrollTaxRate > 0 && !taxOrganizationId) {
+    throw new Error("Select a tax treasury organization before enabling payroll tax.");
   }
 
   const tenantId = nextTenantId(store);
@@ -942,6 +1010,8 @@ function createTenant(store, actorName, payload) {
     activation_code: activationCode,
     created_at: new Date().toISOString(),
     payroll_default_amount: payrollDefault,
+    payroll_tax_rate: payrollTaxRate,
+    tax_organization_id: taxOrganizationId,
     primary_region_name: regionName || tenantName,
     feature_flags: [
       "base_banking",
@@ -1672,6 +1742,10 @@ function updateOrganizationStatus(store, tenantId, actorName, organizationId, ne
   const organization = findOrganization(store, tenantId, organizationId);
   if (!organization) {
     throw new Error("Organization not found.");
+  }
+  const tenant = findTenant(store, tenantId);
+  if (nextStatus !== "ACTIVE" && tenant?.tax_organization_id === organizationId && Number(tenant?.payroll_tax_rate || 0) > 0) {
+    throw new Error("This organization is assigned as the tenant tax treasury.");
   }
 
   organization.status = nextStatus;

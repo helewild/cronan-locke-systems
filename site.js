@@ -635,6 +635,23 @@ function getPayrollHealth(store) {
   };
 }
 
+function getTaxConfiguration(store) {
+  const tenant = safeArray(store.tenants)[0] || null;
+  const rate = Number(tenant?.payroll_tax_rate || 0);
+  const organization = tenant?.tax_organization_id
+    ? safeArray(store.organizations).find((item) => item.organization_id === tenant.tax_organization_id)
+    : null;
+  const treasury = organization
+    ? safeArray(store.accounts).find((account) => account.account_id === organization.treasury_account_id)
+    : null;
+  return {
+    tenant,
+    rate,
+    organization,
+    treasury
+  };
+}
+
 function getBankCoreRows(store) {
   const activeIncidentCount = safeArray(store.vault_incidents).filter((incident) => incident.state === "ACTIVE").length;
   const riskSummary = getOrganizationRiskSummary(store);
@@ -647,6 +664,7 @@ function getBankCoreRows(store) {
   const payrollBurden = safeArray(store.organizations)
     .filter((organization) => organization.status === "ACTIVE")
     .reduce((total, organization) => total + getOrganizationPayrollBurden(store, organization.organization_id), 0);
+  const taxConfig = getTaxConfiguration(store);
 
   return [
     [
@@ -686,6 +704,20 @@ function getBankCoreRows(store) {
       { chip: payrollHealth.label, tone: payrollHealth.tone },
       `${getActiveEmploymentCount(store)} active job(s) / L$${payrollBurden} next-run burden`,
       payrollHealth.note
+    ],
+    [
+      "Taxation",
+      "Payroll withholding and public treasury",
+      {
+        chip: taxConfig.rate > 0 ? (taxConfig.organization ? "WITHHOLDING" : "MISCONFIGURED") : "DISABLED",
+        tone: taxConfig.rate > 0 ? (taxConfig.organization ? "" : "alert") : "dim"
+      },
+      taxConfig.rate > 0
+        ? `${taxConfig.rate}% to ${taxConfig.organization?.name || "UNASSIGNED TREASURY"}`
+        : "No payroll tax configured",
+      taxConfig.rate > 0
+        ? `Tax treasury balance L$${Number(taxConfig.treasury?.balance || 0)}`
+        : "Tenant payroll runs deposit full wages with no withholding"
     ],
     [
       "Security",
@@ -2139,6 +2171,12 @@ async function runTenantAction(kind, tenantId) {
 
   if (kind === "edit-tenant") {
     const tenant = safeArray(state.store?.tenants).find((item) => item.tenant_id === tenantId);
+    const taxOrganizationOptions = [{ value: "", label: "No Payroll Tax Treasury" }]
+      .concat(
+        safeArray(state.store?.organizations)
+          .filter((item) => item.tenant_id === tenantId && item.status === "ACTIVE")
+          .map((item) => ({ value: item.organization_id, label: `${item.organization_id} - ${item.name}` }))
+      );
     if (!tenant) {
       addLog("Target tenant was not found.");
       return;
@@ -2151,7 +2189,9 @@ async function runTenantAction(kind, tenantId) {
         { name: "tenant_name", label: "Tenant Display Name", required: true, value: tenant.name || "" },
         { name: "bank_name", label: "Bank Display Name", required: true, value: tenant.bank_name || "" },
         { name: "primary_region_name", label: "Primary Region Name", required: true, value: tenant.primary_region_name || "" },
-        { name: "payroll_default_amount", label: "Default Payroll Amount", type: "number", required: true, value: String(tenant.payroll_default_amount ?? 250) }
+        { name: "payroll_default_amount", label: "Default Payroll Amount", type: "number", required: true, value: String(tenant.payroll_default_amount ?? 250) },
+        { name: "payroll_tax_rate", label: "Payroll Tax Rate (%)", type: "number", required: true, value: String(tenant.payroll_tax_rate ?? 0) },
+        { name: "tax_organization_id", label: "Tax Treasury Organization", type: "select", value: tenant.tax_organization_id || "", options: taxOrganizationOptions }
       ]
     });
     if (!values) {
@@ -2163,7 +2203,9 @@ async function runTenantAction(kind, tenantId) {
       tenant_name: String(values.tenant_name || "").trim(),
       bank_name: String(values.bank_name || "").trim(),
       primary_region_name: String(values.primary_region_name || "").trim(),
-      payroll_default_amount: Number(values.payroll_default_amount)
+      payroll_default_amount: Number(values.payroll_default_amount),
+      payroll_tax_rate: Number(values.payroll_tax_rate),
+      tax_organization_id: String(values.tax_organization_id || "").trim()
     });
     if (!result.ok) {
       addLog(result.error || "Tenant update failed.");
@@ -2519,6 +2561,12 @@ function wireAdminActions() {
     }
 
     const tenant = getCurrentTenant();
+    const taxOrganizationOptions = [{ value: "", label: "No Payroll Tax Treasury" }]
+      .concat(
+        safeArray(state.store?.organizations)
+          .filter((item) => item.tenant_id === tenant?.tenant_id && item.status === "ACTIVE")
+          .map((item) => ({ value: item.organization_id, label: `${item.organization_id} - ${item.name}` }))
+      );
     const values = await openActionModal({
       title: "Manage Tenant",
       submitLabel: "Save Tenant Settings",
@@ -2527,7 +2575,9 @@ function wireAdminActions() {
         { name: "tenant_name", label: "Tenant Display Name", required: true, value: tenant?.name || "" },
         { name: "bank_name", label: "Bank Display Name", required: true, value: tenant?.bank_name || "" },
         { name: "primary_region_name", label: "Primary Region Name", required: true, value: tenant?.primary_region_name || "" },
-        { name: "payroll_default_amount", label: "Default Payroll Amount", type: "number", required: true, value: String(tenant?.payroll_default_amount || 250) }
+        { name: "payroll_default_amount", label: "Default Payroll Amount", type: "number", required: true, value: String(tenant?.payroll_default_amount || 250) },
+        { name: "payroll_tax_rate", label: "Payroll Tax Rate (%)", type: "number", required: true, value: String(tenant?.payroll_tax_rate || 0) },
+        { name: "tax_organization_id", label: "Tax Treasury Organization", type: "select", value: tenant?.tax_organization_id || "", options: taxOrganizationOptions }
       ]
     });
     if (!values) {
@@ -2538,7 +2588,9 @@ function wireAdminActions() {
       tenant_name: String(values.tenant_name || "").trim(),
       bank_name: String(values.bank_name || "").trim(),
       primary_region_name: String(values.primary_region_name || "").trim(),
-      payroll_default_amount: Number(values.payroll_default_amount)
+      payroll_default_amount: Number(values.payroll_default_amount),
+      payroll_tax_rate: Number(values.payroll_tax_rate),
+      tax_organization_id: String(values.tax_organization_id || "").trim()
     });
     if (!result.ok) {
       addLog(result.error || "Tenant management request failed.");

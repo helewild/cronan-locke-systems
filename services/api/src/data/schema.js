@@ -12,13 +12,17 @@ export const STORE_TABLES = [
       "activation_code",
       "created_at",
       "payroll_default_amount",
+      "payroll_tax_rate",
+      "tax_organization_id",
       "primary_region_name",
       "feature_flags"
     ],
     jsonColumns: ["feature_flags"],
-    numberColumns: ["payroll_default_amount"],
+    numberColumns: ["payroll_default_amount", "payroll_tax_rate"],
     defaults: {
       payroll_default_amount: 250,
+      payroll_tax_rate: 0,
+      tax_organization_id: "",
       primary_region_name: "",
       feature_flags: []
     }
@@ -260,6 +264,8 @@ export const CREATE_TABLE_STATEMENTS = [
     activation_code TEXT,
     created_at TIMESTAMPTZ,
     payroll_default_amount NUMERIC(18,2) NOT NULL DEFAULT 250,
+    payroll_tax_rate NUMERIC(8,2) NOT NULL DEFAULT 0,
+    tax_organization_id TEXT,
     primary_region_name TEXT,
     feature_flags JSONB NOT NULL DEFAULT '[]'::jsonb
   )`,
@@ -411,6 +417,8 @@ export const CREATE_TABLE_STATEMENTS = [
     scope TEXT
   )`,
   `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS payroll_default_amount NUMERIC(18,2) NOT NULL DEFAULT 250`,
+  `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS payroll_tax_rate NUMERIC(8,2) NOT NULL DEFAULT 0`,
+  `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS tax_organization_id TEXT`,
   `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS primary_region_name TEXT`,
   `ALTER TABLE organizations ADD COLUMN IF NOT EXISTS organization_type TEXT NOT NULL DEFAULT 'BUSINESS'`,
   `ALTER TABLE organizations ADD COLUMN IF NOT EXISTS department_name TEXT`,
