@@ -1224,6 +1224,74 @@ function buildObjectCardResponse(store, payload, account, card, extra = {}) {
   };
 }
 
+function buildObjectHudResponse(store, payload, account, extra = {}) {
+  const tenant = findTenant(store, account.tenant_id);
+  const cards = (store.cards || []).filter((item) => item.account_id === account.account_id);
+  const fines = (store.fines || []).filter((item) => item.account_id === account.account_id);
+  const loans = (store.loans || []).filter((item) => item.account_id === account.account_id);
+  const transactions = getRecentTransactionsForAccount(store, account.account_id, payload.statement_count || 10);
+  const employments = (store.employments || []).filter((item) => item.account_id === account.account_id);
+  const organizations = (store.organizations || []).filter((item) =>
+    employments.some((job) => job.organization_id && job.organization_id === item.organization_id)
+  );
+  const transferDirectory = (store.accounts || [])
+    .filter((item) =>
+      item.tenant_id === account.tenant_id
+      && item.account_id !== account.account_id
+      && item.player_id
+      && isActive(item.status)
+    )
+    .map((item) => ({
+      account_id: item.account_id,
+      customer_name: item.customer_name,
+      status: item.status
+    }));
+
+  return {
+    ok: true,
+    object_type: "hud",
+    action_type: String(payload.action_type || "session"),
+    tenant: tenant ? {
+      tenant_id: tenant.tenant_id,
+      name: tenant.name,
+      bank_name: tenant.bank_name
+    } : null,
+    account: {
+      account_id: account.account_id,
+      customer_name: account.customer_name,
+      balance: Number(account.balance || 0),
+      outstanding_fine: Number(account.outstanding_fine || 0),
+      loan_balance: Number(account.loan_balance || 0),
+      status: account.status,
+      risk_flag: Boolean(account.risk_flag)
+    },
+    cards: cards.map((item) => ({
+      card_id: item.card_id,
+      card_number: item.card_number,
+      state: item.state
+    })),
+    fines: fines.map((item) => ({
+      fine_id: item.fine_id,
+      amount: Number(item.amount || 0),
+      reference: item.reference,
+      status: item.status
+    })),
+    loans: loans.map((item) => ({
+      loan_id: item.loan_id,
+      balance: Number(item.balance || 0),
+      terms: item.terms,
+      status: item.status
+    })),
+    transactions,
+    employments: employments.map((item) => ({ ...item })),
+    organizations: organizations.map((item) => ({ ...item })),
+    transfer_directory: transferDirectory,
+    tenant_object_secret: extra.tenantObjectSecret || "",
+    object_secret_mode: extra.objectSecretMode || "",
+    message: extra.message || ""
+  };
+}
+
 function ensureObjectAtmAccountReady(account, card) {
   if (!isActive(account.status)) {
     throw new Error("Account is not active for ATM use.");
@@ -1347,6 +1415,98 @@ function objectAtmAction(store, payload) {
       resulting_balance: Number(account.balance || 0)
     }
   });
+}
+
+function objectHudAction(store, payload) {
+  const avatarName = String(payload.avatar_name || "").trim();
+  const actionType = String(payload.action_type || "session").trim().toLowerCase();
+  const hudId = String(payload.device_id || payload.hud_id || "banking-phone").trim() || "banking-phone";
+  const actorName = `HUD ${hudId} / ${avatarName || "Unknown Resident"}`;
+  const { tenantId, account } = resolveObjectAccountContext(store, payload, avatarName, "HUD");
+  const secretInfo = validateObjectSecretForTenant(store, payload, tenantId);
+  const primaryCard = findPrimaryCardForAccount(store, account.account_id);
+
+  if (actionType === "session" || actionType === "history") {
+    return buildObjectHudResponse(store, payload, account, {
+      tenantObjectSecret: secretInfo.tenantObjectSecret,
+      objectSecretMode: secretInfo.mode,
+      message: `Mobile banking ready for ${account.customer_name}.`
+    });
+  }
+
+  if (actionType === "transfer") {
+    transferFunds(
+      store,
+      tenantId,
+      actorName,
+      account.account_id,
+      String(payload.target_account_id || "").trim(),
+      Number(payload.amount || 0),
+      { memo: String(payload.memo || "").trim() },
+      account.account_id
+    );
+    return buildObjectHudResponse(store, payload, account, {
+      tenantObjectSecret: secretInfo.tenantObjectSecret,
+      objectSecretMode: secretInfo.mode,
+      message: "Transfer approved."
+    });
+  }
+
+  if (actionType === "pay_fine") {
+    payFine(store, tenantId, actorName, String(payload.fine_id || "").trim(), account.account_id);
+    return buildObjectHudResponse(store, payload, account, {
+      tenantObjectSecret: secretInfo.tenantObjectSecret,
+      objectSecretMode: secretInfo.mode,
+      message: "Fine paid."
+    });
+  }
+
+  if (actionType === "pay_loan") {
+    payLoan(store, tenantId, actorName, String(payload.loan_id || "").trim(), Number(payload.amount || 0), account.account_id);
+    return buildObjectHudResponse(store, payload, account, {
+      tenantObjectSecret: secretInfo.tenantObjectSecret,
+      objectSecretMode: secretInfo.mode,
+      message: "Loan payment approved."
+    });
+  }
+
+  if (actionType === "lock_card") {
+    if (!primaryCard) {
+      throw new Error("No bank card is linked to this account.");
+    }
+    updateCardState(store, tenantId, actorName, primaryCard.card_id, "LOCKED", "card_lock", "Card locked from mobile HUD", account.account_id);
+    return buildObjectHudResponse(store, payload, account, {
+      tenantObjectSecret: secretInfo.tenantObjectSecret,
+      objectSecretMode: secretInfo.mode,
+      message: "Card locked."
+    });
+  }
+
+  if (actionType === "unlock_card") {
+    if (!primaryCard) {
+      throw new Error("No bank card is linked to this account.");
+    }
+    updateCardState(store, tenantId, actorName, primaryCard.card_id, "ACTIVE", "card_unlock", "Card unlocked from mobile HUD", account.account_id);
+    return buildObjectHudResponse(store, payload, account, {
+      tenantObjectSecret: secretInfo.tenantObjectSecret,
+      objectSecretMode: secretInfo.mode,
+      message: "Card unlocked."
+    });
+  }
+
+  if (actionType === "report_stolen_card") {
+    if (!primaryCard) {
+      throw new Error("No bank card is linked to this account.");
+    }
+    updateCardState(store, tenantId, actorName, primaryCard.card_id, "STOLEN", "card_report_stolen", "Card reported stolen from mobile HUD", account.account_id);
+    return buildObjectHudResponse(store, payload, account, {
+      tenantObjectSecret: secretInfo.tenantObjectSecret,
+      objectSecretMode: secretInfo.mode,
+      message: "Card reported stolen."
+    });
+  }
+
+  throw new Error("Unsupported HUD action.");
 }
 
 function runPayroll(store, tenantId, actorName, amountInput) {
@@ -2998,6 +3158,9 @@ export async function handlePortal(req, res) {
         await writeStore(store);
       } else if (String(body.object_type || "").trim().toLowerCase() === "card") {
         result = objectCardAction(store, body);
+        await writeStore(store);
+      } else if (String(body.object_type || "").trim().toLowerCase() === "hud") {
+        result = objectHudAction(store, body);
         await writeStore(store);
       } else {
         result = { ok: false, error: "Unsupported object type." };

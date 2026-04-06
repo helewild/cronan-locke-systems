@@ -9,6 +9,7 @@ Current objects:
 - `scripts/teller/teller_mock.lsl`
 - `scripts/card/card_mock.lsl`
 - `scripts/card/card_live.lsl`
+- `scripts/hud/hud_phone_live.lsl`
 - `scripts/hud/hud_mock.lsl`
 - `scripts/vault/vault_mock.lsl`
 - `scripts/security/security_terminal_mock.lsl`
